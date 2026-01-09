@@ -1,7 +1,7 @@
 {
   "name": "evastrong-backend",
   "version": "1.0.0",
-  \"description\": \"Backend para Eva Strong - App de fitness con autenticación OAuth y pagos con PayPal\",
+  "description": "Backend para Eva Strong - App de fitness con autenticación OAuth y pagos con PayPal",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -12,7 +12,7 @@
     "fitness",
     "eva-strong",
     "oauth",
-    \"paypal\",
+    "paypal",
     "api"
   ],
   "author": "Eva Strong Team",
@@ -23,7 +23,7 @@
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "passport-apple": "^2.0.2",
-    "jsonwebtoken": "^9.1.2",
+    "jsonwebtoken": "^9.0.0",
     "bcryptjs": "^2.4.3",
     "mongoose": "^8.0.0",
     "dotenv": "^16.3.1",

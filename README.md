@@ -1,6 +1,36 @@
-# 🎉 Eva Strong Backend - API REST
+# 🎉 EvaStrong Backend - API REST
 
-Backend para la app Eva Strong con autenticación OAuth (Google/Apple) y pagos con Mercado Pago.
+<div align="center">
+
+### 🏋️ Fitness App Backend con Autenticación OAuth y Pagos
+
+![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)
+![Express](https://img.shields.io/badge/Express-Latest-blue)
+![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-green)
+![JWT](https://img.shields.io/badge/JWT-Security-yellow)
+![Passport](https://img.shields.io/badge/Passport-OAuth-purple)
+
+[📚 Documentación](#documentación) • [🚀 Quick Start](#quick-start) • [🔧 Configuración](#configuración) • [📋 API](#api-endpoints)
+
+</div>
+
+---
+
+Backend para la app EvaStrong con autenticación OAuth (Google/Apple) y pagos con Mercado Pago.
+
+## 📚 Documentación
+
+Tenemos documentación completa y paso a paso para cada parte:
+
+| Documento | Propósito | Tiempo |
+|-----------|----------|--------|
+| **[QUICK_START.md](./QUICK_START.md)** | Deploy en 5 minutos | ⚡ 5 min |
+| **[MONGODB_SETUP.md](./MONGODB_SETUP.md)** | Configurar MongoDB Atlas | 📚 15 min |
+| **[GOOGLE_OAUTH_SETUP.md](./GOOGLE_OAUTH_SETUP.md)** | Configurar Google OAuth | 🔐 15 min |
+| **[RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md)** | Desplegar en Render | 🚀 10 min |
+| **[BACKEND_SETUP.md](./BACKEND_SETUP.md)** | Setup completo local | 📖 20 min |
+
+---
 
 ## 📋 Características
 

@@ -59,9 +59,8 @@ app.use(passport.session());
 
 // ========== CONEXIÓN BASE DE DATOS ==========
 
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/evastrong')
-  .then(() => console.log('✓ MongoDB conectado'))
-  .catch((err) => console.error('✗ Error MongoDB:', err));
+const connectDB = require('./config/database');
+connectDB();
 
 // ========== RUTAS ==========
 

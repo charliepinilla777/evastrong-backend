@@ -27,6 +27,7 @@ Tenemos documentación completa y paso a paso para cada parte:
 | **[QUICK_START.md](./QUICK_START.md)** | Deploy en 5 minutos | ⚡ 5 min |
 | **[MONGODB_SETUP.md](./MONGODB_SETUP.md)** | Configurar MongoDB Atlas | 📚 15 min |
 | **[GOOGLE_OAUTH_SETUP.md](./GOOGLE_OAUTH_SETUP.md)** | Configurar Google OAuth | 🔐 15 min |
+| **[MERCADO_PAGO_SETUP.md](./MERCADO_PAGO_SETUP.md)** | Mercado Pago + PayPal | 💳 20 min |
 | **[RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md)** | Desplegar en Render | 🚀 10 min |
 | **[BACKEND_SETUP.md](./BACKEND_SETUP.md)** | Setup completo local | 📖 20 min |
 

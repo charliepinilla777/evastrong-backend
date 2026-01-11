@@ -7,6 +7,19 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const mongoose = require('mongoose');
 
+// ========== VALIDACIÓN DE VARIABLES DE ENTORNO ==========
+const requiredEnvVars = ['JWT_SECRET', 'MONGODB_URI'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingEnvVars.length > 0) {
+  console.error(`\n❌ Error: Variables de entorno requeridas no configuradas:`);
+  missingEnvVars.forEach(varName => {
+    console.error(`   - ${varName}`);
+  });
+  console.error(`\nConfigura estas variables antes de continuar.\n`);
+  process.exit(1);
+}
+
 // Importar estrategias de autenticación
 require('./config/passport');
 

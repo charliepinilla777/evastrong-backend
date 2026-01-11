@@ -33,34 +33,59 @@ passport.use('google', new GoogleStrategy({
 }));
 
 // ========== APPLE OAUTH ==========
-passport.use('apple', new AppleStrategy({
-  clientID: process.env.APPLE_CLIENT_ID,
-  teamID: process.env.APPLE_TEAM_ID,
-  keyID: process.env.APPLE_KEY_ID,
-  privateKeyString: require('fs').readFileSync(
-    process.env.APPLE_PRIVATE_KEY_PATH,
-    'utf8'
-  ),
-  callbackURL: `${process.env.FRONTEND_URL}/auth/apple/callback`,
-}, async (accessToken, refreshToken, idToken, user, done) => {
+// Solo inicializar Apple Strategy si hay credenciales disponibles
+if (process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID) {
   try {
-    let existingUser = await User.findOne({ appleId: user.id });
+    const fs = require('fs');
+    const path = require('path');
     
-    if (!existingUser) {
-      existingUser = await User.create({
-        appleId: user.id,
-        email: user.email,
-        name: user.name?.firstName || 'Usuario Apple',
-        provider: 'apple',
-        emailVerified: true,
-      });
+    let privateKeyString;
+    
+    // Intentar leer desde archivo local
+    if (process.env.APPLE_PRIVATE_KEY_PATH && fs.existsSync(process.env.APPLE_PRIVATE_KEY_PATH)) {
+      privateKeyString = fs.readFileSync(process.env.APPLE_PRIVATE_KEY_PATH, 'utf8');
+    }
+    // O usar variable de entorno directamente
+    else if (process.env.APPLE_PRIVATE_KEY) {
+      privateKeyString = process.env.APPLE_PRIVATE_KEY;
     }
     
-    return done(null, existingUser);
+    // Solo si tenemos la private key, configurar la estrategia
+    if (privateKeyString) {
+      passport.use('apple', new AppleStrategy({
+        clientID: process.env.APPLE_CLIENT_ID,
+        teamID: process.env.APPLE_TEAM_ID,
+        keyID: process.env.APPLE_KEY_ID,
+        privateKeyString: privateKeyString,
+        callbackURL: `${process.env.FRONTEND_URL}/auth/apple/callback`,
+      }, async (accessToken, refreshToken, idToken, user, done) => {
+        try {
+          let existingUser = await User.findOne({ appleId: user.id });
+          
+          if (!existingUser) {
+            existingUser = await User.create({
+              appleId: user.id,
+              email: user.email,
+              name: user.name?.firstName || 'Usuario Apple',
+              provider: 'apple',
+              emailVerified: true,
+            });
+          }
+          
+          return done(null, existingUser);
+        } catch (error) {
+          return done(error);
+        }
+      }));
+    } else {
+      console.warn('⚠️  Apple OAuth configuración incompleta: APPLE_PRIVATE_KEY no encontrada');
+    }
   } catch (error) {
-    return done(error);
+    console.error('❌ Error configurando Apple OAuth:', error.message);
   }
-}));
+} else {
+  console.warn('⚠️  Apple OAuth deshabilitado: Variables de entorno no configuradas');
+}
 
 // ========== SERIALIZACIÓN ==========
 passport.serializeUser((user, done) => {

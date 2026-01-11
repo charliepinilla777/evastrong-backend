@@ -2,6 +2,8 @@ node_modules/
 .env
 .env.local
 .env.*.local
+.env.production
+.env.development
 dist/
 build/
 *.log
@@ -18,5 +20,13 @@ yarn.lock
 coverage/
 .nyc_output/
 keys/
+keys/**/*.p8
+keys/**/*.pem
 uploads/
 temp/
+*.pem
+*.p8
+*.key
+*.crt
+.env.*
+!.env.example

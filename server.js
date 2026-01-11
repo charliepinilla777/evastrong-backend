@@ -12,12 +12,17 @@ const requiredEnvVars = ['JWT_SECRET', 'MONGODB_URI'];
 const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missingEnvVars.length > 0) {
-  console.error(`\n❌ Error: Variables de entorno requeridas no configuradas:`);
+  console.warn(`\n⚠️  Advertencia: Variables de entorno no configuradas:`);
   missingEnvVars.forEach(varName => {
-    console.error(`   - ${varName}`);
+    console.warn(`   - ${varName}`);
   });
-  console.error(`\nConfigura estas variables antes de continuar.\n`);
-  process.exit(1);
+  console.warn(`\nConfigura estas variables para funcionamiento correcto.\n`);
+  
+  // Solo salir en producción si faltan variables críticas
+  if (process.env.NODE_ENV === 'production' && missingEnvVars.includes('MONGODB_URI')) {
+    console.error(`\n❌ Error crítico: MONGODB_URI es requerida en producción\n`);
+    process.exit(1);
+  }
 }
 
 // Importar estrategias de autenticación

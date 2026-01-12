@@ -6,31 +6,37 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 
 // ========== GOOGLE OAUTH ==========
-passport.use('google', new GoogleStrategy({
-  clientID: process.env.GOOGLE_CLIENT_ID,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: process.env.GOOGLE_CALLBACK_URL,
-}, async (accessToken, refreshToken, profile, done) => {
-  try {
-    // Buscar o crear usuario
-    let user = await User.findOne({ googleId: profile.id });
-    
-    if (!user) {
-      user = await User.create({
-        googleId: profile.id,
-        email: profile.emails[0].value,
-        name: profile.displayName,
-        avatar: profile.photos[0]?.value,
-        provider: 'google',
-        emailVerified: true, // Google verifica el email
-      });
+// Solo inicializar Google Strategy si hay credenciales disponibles
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_CALLBACK_URL) {
+  passport.use('google', new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: process.env.GOOGLE_CALLBACK_URL,
+  }, async (accessToken, refreshToken, profile, done) => {
+    try {
+      // Buscar o crear usuario
+      let user = await User.findOne({ googleId: profile.id });
+      
+      if (!user) {
+        user = await User.create({
+          googleId: profile.id,
+          email: profile.emails[0].value,
+          name: profile.displayName,
+          avatar: profile.photos[0]?.value,
+          provider: 'google',
+          emailVerified: true, // Google verifica el email
+        });
+      }
+      
+      return done(null, user);
+    } catch (error) {
+      return done(error);
     }
-    
-    return done(null, user);
-  } catch (error) {
-    return done(error);
-  }
-}));
+  }));
+} else {
+  console.warn('⚠️  Google OAuth deshabilitado: Variables de entorno no configuradas');
+  console.warn('   Configura: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_CALLBACK_URL');
+}
 
 // ========== APPLE OAUTH ==========
 // Solo inicializar Apple Strategy si hay credenciales disponibles

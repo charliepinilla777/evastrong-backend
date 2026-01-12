@@ -132,17 +132,19 @@ curl https://tu-servicio.onrender.com/health
 
 ## 📞 Variables de Entorno Rápido (Copy-Paste)
 
-Aquí hay un template. Reemplaza los valores:
+Aquí hay un template. **IMPORTANTE: Reemplaza los placeholders con tus valores reales:**
 
 ```
 NODE_ENV=production
-MONGODB_URI=mongodb+srv://USERNAME:PASSWORD@cluster0.xxxxx.mongodb.net/evastrong?retryWrites=true&w=majority
-JWT_SECRET=RESULTADO_DEL_COMANDO_NODE_QUE_EJECUTASTE
+MONGODB_URI=[Obtén desde MongoDB Atlas → Connect → Connection String]
+JWT_SECRET=[Genera con: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"]
 FRONTEND_URL=https://tu-frontend.com (opcional)
-GOOGLE_CLIENT_ID=TU_CLIENT_ID (opcional)
-GOOGLE_CLIENT_SECRET=TU_CLIENT_SECRET (opcional)
+GOOGLE_CLIENT_ID=[Obtén desde Google Cloud Console] (opcional)
+GOOGLE_CLIENT_SECRET=[Obtén desde Google Cloud Console] (opcional)
 GOOGLE_CALLBACK_URL=https://tu-servicio.onrender.com/auth/google/callback (opcional)
 ```
+
+⚠️ **NUNCA** hagas commit de variables de entorno reales. Úsalos SOLO en Render Dashboard.
 
 ---
 

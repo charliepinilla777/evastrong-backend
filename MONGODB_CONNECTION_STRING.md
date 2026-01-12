@@ -3,19 +3,22 @@
 ## ✅ Información Confirmada
 
 - **Usuario:** `evastrong_user`
-- **Contraseña:** `Ducati2026`
+- **Contraseña:** `[Tu contraseña segura - NO HAGAS COMMIT]`
 - **Cluster:** `evastrong-cluster`
 - **Base de datos:** `evastrong`
 
 ---
 
-## 📋 COPIA ESTA CONNECTION STRING
+## 📋 FORMATO DE CONNECTION STRING
 
 ```
-mongodb+srv://evastrong_user:Ducati2026@evastrong-cluster.xxxxx.mongodb.net/evastrong?retryWrites=true&w=majority
+mongodb+srv://evastrong_user:[TU_CONTRASEÑA]@evastrong-cluster.[XXXXX].mongodb.net/evastrong?retryWrites=true&w=majority
 ```
 
-⚠️ **IMPORTANTE:** El `xxxxx` es tu connection string ID. Necesitas reemplazarlo con el tuyo.
+⚠️ **IMPORTANTE:** 
+- Reemplaza `[TU_CONTRASEÑA]` con tu contraseña REAL (solo en Render, NUNCA en el repositorio)
+- Reemplaza `[XXXXX]` con tu connection string ID
+- **NUNCA hagas commit de contraseñas reales en este archivo**
 
 ---
 
@@ -32,10 +35,10 @@ mongodb+srv://evastrong_user:Ducati2026@evastrong-cluster.xxxxx.mongodb.net/evas
    ```
    mongodb+srv://evastrong_user:<password>@evastrong-cluster.xxxxx.mongodb.net/?retryWrites=true&w=majority
    ```
-7. **Reemplaza `<password>` con `Ducati2026`**
+7. **Reemplaza `<password>` con tu contraseña actual**
 8. **Agrega `/evastrong` antes del `?`** para quedar así:
    ```
-   mongodb+srv://evastrong_user:Ducati2026@evastrong-cluster.xxxxx.mongodb.net/evastrong?retryWrites=true&w=majority
+   mongodb+srv://evastrong_user:[TU_CONTRASEÑA]@evastrong-cluster.xxxxx.mongodb.net/evastrong?retryWrites=true&w=majority
    ```
 
 ### Opción 2: Construirla Manualmente
@@ -48,7 +51,7 @@ Necesitas encontrar tu connection string ID (el `xxxxx`):
 4. Copia ese `xxxxx`
 5. Ahora tienes:
    ```
-   mongodb+srv://evastrong_user:Ducati2026@evastrong-cluster.XXXXX.mongodb.net/evastrong?retryWrites=true&w=majority
+   mongodb+srv://evastrong_user:[TU_CONTRASEÑA]@evastrong-cluster.XXXXX.mongodb.net/evastrong?retryWrites=true&w=majority
    ```
 
 ---
@@ -124,11 +127,13 @@ Si ves esto, ¡está funcionando! 🎉
 
 ## 💬 Ejemplo Completo
 
-Aquí hay un ejemplo con datos ficticios pero formatos correctos:
+Aquí hay un ejemplo con formato correcto (con placeholder de contraseña):
 
 ```
-mongodb+srv://evastrong_user:Ducati2026@evastrong-cluster.a1b2c3d4e5f6g7h8.mongodb.net/evastrong?retryWrites=true&w=majority
+mongodb+srv://evastrong_user:[TU_CONTRASEÑA_AQUI]@evastrong-cluster.a1b2c3d4e5f6g7h8.mongodb.net/evastrong?retryWrites=true&w=majority
 ```
 
-Tu connection string será igual pero con un `a1b2c3d4e5f6g7h8` diferente.
+Tu connection string será igual pero:
+- Reemplaza `[TU_CONTRASEÑA_AQUI]` con tu contraseña real
+- El `a1b2c3d4e5f6g7h8` será diferente (tu connection string ID)
 

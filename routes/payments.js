@@ -12,6 +12,9 @@ const PAYPAL_API = process.env.PAYPAL_MODE === 'sandbox'
   ? 'https://api.sandbox.paypal.com'
   : 'https://api.paypal.com';
 
+// Mercado Pago API
+const MERCADO_PAGO_API = 'https://api.mercadopago.com';
+
 // Obtener token de acceso de PayPal
 async function getPayPalToken() {
   try {
@@ -338,6 +341,204 @@ router.get('/subscription', authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message,
+    });
+  }
+});
+
+// ========== MERCADO PAGO: CREAR PREFERENCIA DE PAGO ==========
+
+router.post('/mercado-pago/create-preference', authMiddleware, async (req, res) => {
+  try {
+    const { plan, period } = req.body;
+    
+    if (!['basic', 'premium'].includes(plan)) {
+      return res.status(400).json({ success: false, message: 'Plan inválido' });
+    }
+    
+    if (!['monthly', 'annual'].includes(period)) {
+      return res.status(400).json({ success: false, message: 'Período inválido' });
+    }
+
+    // Precios en ARS (Pesos Argentinos)
+    const prices = {
+      basic: { monthly: 990, annual: 9900 },
+      premium: { monthly: 1990, annual: 19900 },
+    };
+
+    const amount = prices[plan][period];
+    const description = `Suscripción Eva Strong - Plan ${plan.toUpperCase()} (${period === 'monthly' ? 'Mensual' : 'Anual'})`;
+
+    // Crear preferencia en Mercado Pago
+    const preferenceData = {
+      items: [
+        {
+          title: description,
+          quantity: 1,
+          unit_price: amount,
+          currency_id: 'ARS',
+        },
+      ],
+      payer: {
+        email: req.user.email,
+        name: req.user.name,
+      },
+      back_urls: {
+        success: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payments/success`,
+        pending: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payments/pending`,
+        failure: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payments/failure`,
+      },
+      notification_url: `${process.env.BACKEND_URL || 'http://localhost:5000'}/payments/webhook-mercado-pago`,
+      external_reference: `${req.user._id}-${Date.now()}`,
+      metadata: {
+        userId: req.user._id.toString(),
+        plan,
+        period,
+      },
+    };
+
+    // Realizar request a Mercado Pago
+    const response = await axios.post(
+      `${MERCADO_PAGO_API}/checkout/preferences`,
+      preferenceData,
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    // Guardar pago en BD
+    const payment = await Payment.create({
+      userId: req.user._id,
+      amount,
+      currency: 'ARS',
+      plan,
+      subscriptionPeriod: period,
+      status: 'pending',
+      mercadoPagoPreferenceId: response.data.id,
+      description,
+      paymentMethod: 'mercado_pago',
+    });
+
+    res.json({
+      success: true,
+      preferenceId: response.data.id,
+      initPoint: response.data.init_point,
+      payment: payment._id,
+    });
+  } catch (error) {
+    console.error('Mercado Pago Error:', error.response?.data || error.message);
+    res.status(500).json({
+      success: false,
+      message: error.response?.data?.message || error.message,
+    });
+  }
+});
+
+// ========== MERCADO PAGO: WEBHOOK ==========
+
+router.post('/webhook-mercado-pago', async (req, res) => {
+  try {
+    const { type, data } = req.body;
+
+    console.log('Mercado Pago Webhook Event:', type);
+
+    if (type === 'payment') {
+      const paymentId = data.id;
+
+      // Obtener detalles del pago desde Mercado Pago
+      const paymentResponse = await axios.get(
+        `${MERCADO_PAGO_API}/v1/payments/${paymentId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}`,
+          },
+        }
+      );
+
+      const paymentData = paymentResponse.data;
+
+      // Actualizar pago en BD
+      const payment = await Payment.findOneAndUpdate(
+        { mercadoPagoPreferenceId: paymentData.preference_id },
+        {
+          mercadoPagoPaymentId: paymentId,
+          mercadoPagoStatus: paymentData.status,
+          mercadoPagoStatusDetail: paymentData.status_detail,
+          status: paymentData.status === 'approved' ? 'approved' : 'declined',
+          webhookData: paymentData,
+        },
+        { new: true }
+      );
+
+      if (!payment) {
+        return res.status(404).json({ success: false, message: 'Pago no encontrado' });
+      }
+
+      // Si el pago fue aprobado, crear suscripción
+      if (paymentData.status === 'approved') {
+        const startDate = new Date();
+        const endDate = new Date(startDate);
+
+        if (payment.subscriptionPeriod === 'monthly') {
+          endDate.setMonth(endDate.getMonth() + 1);
+        } else {
+          endDate.setFullYear(endDate.getFullYear() + 1);
+        }
+
+        await Subscription.create({
+          userId: payment.userId,
+          plan: payment.plan,
+          period: payment.subscriptionPeriod,
+          paymentId: payment._id,
+          startDate,
+          endDate,
+          status: 'active',
+          autoRenew: true,
+        });
+
+        // Actualizar usuario
+        await User.findByIdAndUpdate(payment.userId, {
+          subscriptionPlan: payment.plan,
+          subscriptionStatus: 'active',
+        });
+
+        console.log(`✅ Suscripción creada para usuario: ${payment.userId}`);
+      }
+    }
+
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Mercado Pago Webhook Error:', error.response?.data || error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========== MERCADO PAGO: OBTENER ESTADO DEL PAGO ==========
+
+router.get('/mercado-pago/payment/:paymentId', authMiddleware, async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+
+    const response = await axios.get(
+      `${MERCADO_PAGO_API}/v1/payments/${paymentId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}`,
+        },
+      }
+    );
+
+    res.json({
+      success: true,
+      payment: response.data,
+    });
+  } catch (error) {
+    console.error('Mercado Pago Get Payment Error:', error.response?.data || error.message);
+    res.status(500).json({
+      success: false,
+      message: error.response?.data?.message || error.message,
     });
   }
 });

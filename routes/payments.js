@@ -57,7 +57,10 @@ router.post('/create-order', authMiddleware, async (req, res) => {
     };
     
     const amount = prices[plan][period];
-    const description = `Suscripción Eva Strong - Plan ${plan.toUpperCase()} (${period === 'monthly' ? 'Mensual' : 'Anual'})`;
+    const currency = 'USD';
+    const description = `Suscripción Eva Strong - Plan ${plan.toUpperCase()} (${period === 'monthly' ? 'Mensual' : 'Anual'})`
+    
+    console.log(`✅ Orden PayPal creada: Plan ${plan}, Período ${period}, Monto: $${amount} ${currency}`);
     
     // Obtener token de PayPal
     const token = await getPayPalToken();
@@ -349,7 +352,7 @@ router.get('/subscription', authMiddleware, async (req, res) => {
 
 router.post('/mercado-pago/create-preference', authMiddleware, async (req, res) => {
   try {
-    const { plan, period } = req.body;
+    const { plan, period, currency = 'COP' } = req.body;
     
     if (!['basic', 'premium'].includes(plan)) {
       return res.status(400).json({ success: false, message: 'Plan inválido' });
@@ -359,13 +362,23 @@ router.post('/mercado-pago/create-preference', authMiddleware, async (req, res) 
       return res.status(400).json({ success: false, message: 'Período inválido' });
     }
 
-    // Precios en ARS (Pesos Argentinos)
+    if (!['COP', 'USD'].includes(currency)) {
+      return res.status(400).json({ success: false, message: 'Moneda inválida (COP o USD)' });
+    }
+
+    // Precios en COP (Pesos Colombianos) y USD
     const prices = {
-      basic: { monthly: 990, annual: 9900 },
-      premium: { monthly: 1990, annual: 19900 },
+      COP: {
+        basic: { monthly: 39900, annual: 399900 },
+        premium: { monthly: 79900, annual: 799900 },
+      },
+      USD: {
+        basic: { monthly: 9.99, annual: 99.99 },
+        premium: { monthly: 19.99, annual: 199.99 },
+      },
     };
 
-    const amount = prices[plan][period];
+    const amount = prices[currency][plan][period];
     const description = `Suscripción Eva Strong - Plan ${plan.toUpperCase()} (${period === 'monthly' ? 'Mensual' : 'Anual'})`;
 
     // Crear preferencia en Mercado Pago
@@ -375,7 +388,7 @@ router.post('/mercado-pago/create-preference', authMiddleware, async (req, res) 
           title: description,
           quantity: 1,
           unit_price: amount,
-          currency_id: 'ARS',
+          currency_id: currency,
         },
       ],
       payer: {
@@ -412,7 +425,7 @@ router.post('/mercado-pago/create-preference', authMiddleware, async (req, res) 
     const payment = await Payment.create({
       userId: req.user._id,
       amount,
-      currency: 'ARS',
+      currency: currency,
       plan,
       subscriptionPeriod: period,
       status: 'pending',
@@ -420,6 +433,8 @@ router.post('/mercado-pago/create-preference', authMiddleware, async (req, res) 
       description,
       paymentMethod: 'mercado_pago',
     });
+
+    console.log(`✅ Preferencia Mercado Pago creada: Plan ${plan}, Período ${period}, Monto: ${amount} ${currency}`);
 
     res.json({
       success: true,

@@ -33,6 +33,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const paymentRoutes = require('./routes/payments');
 const subscriptionRoutes = require('./routes/subscriptions');
+const trialRoutes = require('./routes/trial');
 
 // Inicializar app
 const app = express();
@@ -98,6 +99,9 @@ app.use('/payments', paymentRoutes);
 
 // Suscripciones
 app.use('/subscriptions', subscriptionRoutes);
+
+// Período de prueba
+app.use('/trial', trialRoutes);
 
 // ========== MANEJO DE ERRORES ==========
 

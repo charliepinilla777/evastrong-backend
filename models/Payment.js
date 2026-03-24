@@ -32,10 +32,15 @@ const paymentSchema = new mongoose.Schema({
   mercadoPagoStatus: String,
   mercadoPagoStatusDetail: String,
 
+  // Wompi
+  wompiTransactionId: String,
+  wompiReference: String,
+  wompiStatus: String,
+
   // Información de pago
   paymentMethod: {
     type: String,
-    enum: ['credit_card', 'debit_card', 'bank_transfer', 'wallet', 'paypal', 'mercado_pago'],
+    enum: ['credit_card', 'debit_card', 'bank_transfer', 'wallet', 'paypal', 'mercado_pago', 'wompi'],
   },
   
   // Plan/Suscripción

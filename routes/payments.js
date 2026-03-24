@@ -1,5 +1,6 @@
 const express = require('express');
 const axios = require('axios');
+const crypto = require('crypto');
 const Payment = require('../models/Payment');
 const Subscription = require('../models/Subscription');
 const User = require('../models/User');
@@ -600,6 +601,251 @@ router.get('/mercado-pago/payment/:paymentId', authMiddleware, async (req, res) 
       success: false,
       message: error.response?.data?.message || error.message,
     });
+  }
+});
+
+// ============================================================
+// WOMPI: CREAR SESION DE PAGO
+// ============================================================
+
+router.post('/wompi/create-session', authMiddleware, async (req, res) => {
+  try {
+    const { plan, period } = req.body;
+
+    if (!['basic', 'premium', 'exclusive'].includes(plan)) {
+      return res.status(400).json({ success: false, message: 'Plan invalido' });
+    }
+
+    if (!['monthly', 'annual'].includes(period)) {
+      return res.status(400).json({ success: false, message: 'Periodo invalido' });
+    }
+
+    // Precios en centavos de COP (Wompi requiere amount-in-cents)
+    const prices = {
+      basic:     { monthly: 3990000,   annual: 39990000  },
+      premium:   { monthly: 7990000,   annual: 79990000  },
+      exclusive: { monthly: 11990000,  annual: 119990000 },
+    };
+
+    const amountInCents = prices[plan][period];
+    const currency = 'COP';
+    const reference = `EVA-${req.user._id}-${Date.now()}`;
+    const description = `EvaStrong Plan ${plan.toUpperCase()} ${period === 'monthly' ? 'Mensual' : 'Anual'}`;
+
+    // Firma de integridad: SHA256(reference + amountInCents + currency + integritySecret)
+    const integritySecret = process.env.WOMPI_INTEGRITY_SECRET;
+    const signatureString = `${reference}${amountInCents}${currency}${integritySecret}`;
+    const integrityHash = crypto.createHash('sha256').update(signatureString).digest('hex');
+
+    // URL de retorno tras pago
+    const redirectUrl = process.env.WOMPI_REDIRECT_URL || 'https://evastrong-backend.onrender.com/payments/wompi/result';
+
+    // Construir URL del checkout de Wompi
+    const wompiBase = process.env.WOMPI_ENV === 'production'
+      ? 'https://checkout.wompi.co/p/'
+      : 'https://checkout.wompi.co/p/';
+
+    const checkoutUrl = `${wompiBase}?public-key=${process.env.WOMPI_PUBLIC_KEY}` +
+      `&currency=${currency}` +
+      `&amount-in-cents=${amountInCents}` +
+      `&reference=${reference}` +
+      `&redirect-url=${encodeURIComponent(redirectUrl)}` +
+      `&signature:integrity=${integrityHash}`;
+
+    // Guardar pago pendiente en BD
+    const payment = await Payment.create({
+      userId: req.user._id,
+      amount: amountInCents / 100,
+      currency,
+      plan,
+      subscriptionPeriod: period,
+      status: 'pending',
+      wompiReference: reference,
+      paymentMethod: 'wompi',
+      description,
+    });
+
+    console.log(`Sesion Wompi creada: ${reference}, Plan ${plan}, ${amountInCents / 100} COP`);
+
+    res.json({
+      success: true,
+      checkoutUrl,
+      reference,
+      payment: payment._id,
+    });
+  } catch (error) {
+    console.error('Wompi Error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ============================================================
+// WOMPI: VERIFICAR ESTADO DE TRANSACCION (polling manual)
+// ============================================================
+
+router.get('/wompi/transaction/:reference', authMiddleware, async (req, res) => {
+  try {
+    const { reference } = req.params;
+
+    // Verificar que la referencia pertenece al usuario
+    const payment = await Payment.findOne({ wompiReference: reference, userId: req.user._id });
+    if (!payment) {
+      return res.status(403).json({ success: false, message: 'No autorizado' });
+    }
+
+    // Consultar el estado en la API de Wompi
+    const wompiApi = process.env.WOMPI_ENV === 'production'
+      ? 'https://production.wompi.co/v1'
+      : 'https://sandbox.wompi.co/v1';
+
+    const response = await axios.get(
+      `${wompiApi}/transactions?reference=${reference}`,
+      {
+        headers: { Authorization: `Bearer ${process.env.WOMPI_PRIVATE_KEY}` },
+      }
+    );
+
+    const transactions = response.data.data;
+    if (!transactions || transactions.length === 0) {
+      return res.json({ success: true, status: 'PENDING', payment: null });
+    }
+
+    const transaction = transactions[0];
+    const approved = transaction.status === 'APPROVED';
+
+    // Actualizar pago en BD
+    await Payment.findOneAndUpdate(
+      { wompiReference: reference },
+      {
+        wompiTransactionId: transaction.id,
+        wompiStatus: transaction.status,
+        status: approved ? 'approved' : transaction.status === 'DECLINED' ? 'declined' : 'pending',
+        completedAt: approved ? new Date() : undefined,
+      }
+    );
+
+    if (approved) {
+      // Verificar que no exista ya una suscripcion para este pago
+      const existingSub = await Subscription.findOne({ paymentId: payment._id });
+      if (!existingSub) {
+        const startDate = new Date();
+        const endDate = new Date(startDate);
+        if (payment.subscriptionPeriod === 'monthly') {
+          endDate.setMonth(endDate.getMonth() + 1);
+        } else {
+          endDate.setFullYear(endDate.getFullYear() + 1);
+        }
+
+        await Subscription.create({
+          userId: payment.userId,
+          plan: payment.plan,
+          period: payment.subscriptionPeriod,
+          paymentId: payment._id,
+          startDate,
+          endDate,
+          status: 'active',
+          autoRenew: true,
+        });
+
+        await User.findByIdAndUpdate(payment.userId, {
+          subscriptionPlan: payment.plan,
+          subscriptionStatus: 'active',
+        });
+
+        console.log(`Suscripcion Wompi activada para usuario: ${payment.userId}`);
+      }
+    }
+
+    res.json({ success: true, status: transaction.status, transactionId: transaction.id });
+  } catch (error) {
+    console.error('Wompi verify Error:', error.response?.data || error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ============================================================
+// WOMPI: WEBHOOK
+// ============================================================
+
+router.post('/wompi/webhook', async (req, res) => {
+  try {
+    const event = req.body;
+
+    // Verificar firma del webhook
+    // SHA256(transaction.id + transaction.status + transaction.amount_in_cents + timestamp + eventsSecret)
+    const eventsSecret = process.env.WOMPI_EVENTS_SECRET;
+    if (eventsSecret && event.signature) {
+      const { properties, checksum } = event.signature;
+      const timestamp = event.timestamp;
+
+      const values = properties.map((prop) => {
+        const parts = prop.split('.');
+        return parts.reduce((obj, key) => obj?.[key], event.data);
+      });
+
+      const toHash = values.join('') + timestamp + eventsSecret;
+      const expected = crypto.createHash('sha256').update(toHash).digest('hex');
+
+      if (expected !== checksum) {
+        console.warn('Wompi webhook: firma invalida');
+        return res.status(401).json({ error: 'Firma invalida' });
+      }
+    }
+
+    if (event.event === 'transaction.updated') {
+      const transaction = event.data?.transaction;
+      if (!transaction) return res.json({ received: true });
+
+      const payment = await Payment.findOneAndUpdate(
+        { wompiReference: transaction.reference },
+        {
+          wompiTransactionId: transaction.id,
+          wompiStatus: transaction.status,
+          status: transaction.status === 'APPROVED' ? 'approved'
+                : transaction.status === 'DECLINED' ? 'declined'
+                : 'pending',
+          completedAt: transaction.status === 'APPROVED' ? new Date() : undefined,
+          webhookData: transaction,
+        },
+        { new: true }
+      );
+
+      if (payment && transaction.status === 'APPROVED') {
+        const existingSub = await Subscription.findOne({ paymentId: payment._id });
+        if (!existingSub) {
+          const startDate = new Date();
+          const endDate = new Date(startDate);
+          if (payment.subscriptionPeriod === 'monthly') {
+            endDate.setMonth(endDate.getMonth() + 1);
+          } else {
+            endDate.setFullYear(endDate.getFullYear() + 1);
+          }
+
+          await Subscription.create({
+            userId: payment.userId,
+            plan: payment.plan,
+            period: payment.subscriptionPeriod,
+            paymentId: payment._id,
+            startDate,
+            endDate,
+            status: 'active',
+            autoRenew: true,
+          });
+
+          await User.findByIdAndUpdate(payment.userId, {
+            subscriptionPlan: payment.plan,
+            subscriptionStatus: 'active',
+          });
+
+          console.log(`Suscripcion Wompi activada via webhook: ${payment.userId}`);
+        }
+      }
+    }
+
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Wompi Webhook Error:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 

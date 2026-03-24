@@ -5,7 +5,22 @@ const { body, validationResult } = require('express-validator');
 
 const router = express.Router();
 
-// ========== OBTENER PERFIL ==========
+// ========== OBTENER PERFIL (alias /me y /profile) ==========
+
+router.get('/me', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    res.json({
+      success: true,
+      user: user.toJSON(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
 
 router.get('/profile', authMiddleware, async (req, res) => {
   try {

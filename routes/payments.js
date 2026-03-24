@@ -8,64 +8,93 @@ const authMiddleware = require('../middleware/auth');
 const router = express.Router();
 
 // PayPal API endpoints
-const PAYPAL_API = process.env.PAYPAL_MODE === 'sandbox' 
+const PAYPAL_API = process.env.PAYPAL_MODE === 'sandbox'
   ? 'https://api.sandbox.paypal.com'
   : 'https://api.paypal.com';
 
 // Mercado Pago API
 const MERCADO_PAGO_API = 'https://api.mercadopago.com';
 
-// Obtener token de acceso de PayPal
-async function getPayPalToken() {
-  try {
-    const auth = Buffer.from(
-      `${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`
-    ).toString('base64');
+// ============================================================
+// HELPERS
+// ============================================================
 
-    const response = await axios.post(`${PAYPAL_API}/v1/oauth2/token`, 'grant_type=client_credentials', {
+async function getPayPalToken() {
+  const auth = Buffer.from(
+    `${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`
+  ).toString('base64');
+
+  const response = await axios.post(
+    `${PAYPAL_API}/v1/oauth2/token`,
+    'grant_type=client_credentials',
+    {
       headers: {
         'Authorization': `Basic ${auth}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-    });
+    }
+  );
 
-    return response.data.access_token;
+  return response.data.access_token;
+}
+
+// FIX #2: Verificacion de firma del webhook de PayPal via API de PayPal
+// Requiere PAYPAL_WEBHOOK_ID en .env
+async function verifyPayPalWebhook(headers, body) {
+  try {
+    const token = await getPayPalToken();
+    const response = await axios.post(
+      `${PAYPAL_API}/v1/notifications/verify-webhook-signature`,
+      {
+        auth_algo: headers['paypal-auth-algo'],
+        cert_url: headers['paypal-cert-url'],
+        transmission_id: headers['paypal-transmission-id'],
+        transmission_sig: headers['paypal-transmission-sig'],
+        transmission_time: headers['paypal-transmission-time'],
+        webhook_id: process.env.PAYPAL_WEBHOOK_ID,
+        webhook_event: body,
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    return response.data.verification_status === 'SUCCESS';
   } catch (error) {
-    console.error('Error getting PayPal token:', error);
-    throw error;
+    console.error('Error verificando firma PayPal:', error.response?.data || error.message);
+    return false;
   }
 }
 
-// ========== CREAR ORDEN DE PAGO CON PAYPAL ==========
+// ============================================================
+// PAYPAL: CREAR ORDEN
+// ============================================================
 
 router.post('/create-order', authMiddleware, async (req, res) => {
   try {
     const { plan, period } = req.body;
-    
-    if (!['basic', 'premium'].includes(plan)) {
-      return res.status(400).json({ success: false, message: 'Plan inválido' });
+
+    if (!['basic', 'premium', 'exclusive'].includes(plan)) {
+      return res.status(400).json({ success: false, message: 'Plan invalido' });
     }
-    
+
     if (!['monthly', 'annual'].includes(period)) {
-      return res.status(400).json({ success: false, message: 'Período inválido' });
+      return res.status(400).json({ success: false, message: 'Periodo invalido' });
     }
-    
-    // Precios en USD
+
     const prices = {
-      basic: { monthly: 9.99, annual: 99.99 },
-      premium: { monthly: 19.99, annual: 199.99 },
+      basic:     { monthly: 9.99,  annual: 99.99  },
+      premium:   { monthly: 19.99, annual: 199.99 },
+      exclusive: { monthly: 29.99, annual: 299.99 },
     };
-    
+
     const amount = prices[plan][period];
-    const currency = 'USD';
-    const description = `Suscripción Eva Strong - Plan ${plan.toUpperCase()} (${period === 'monthly' ? 'Mensual' : 'Anual'})`
-    
-    console.log(`✅ Orden PayPal creada: Plan ${plan}, Período ${period}, Monto: $${amount} ${currency}`);
-    
-    // Obtener token de PayPal
+    const description = `Suscripcion Eva Strong - Plan ${plan.toUpperCase()} (${period === 'monthly' ? 'Mensual' : 'Anual'})`;
+
     const token = await getPayPalToken();
-    
-    // Crear orden en PayPal
+
     const orderData = {
       intent: 'CAPTURE',
       purchase_units: [
@@ -81,15 +110,13 @@ router.post('/create-order', authMiddleware, async (req, res) => {
       ],
       payer: {
         email_address: req.user.email,
-        name: {
-          given_name: req.user.name,
-        },
+        name: { given_name: req.user.name },
       },
       application_context: {
         brand_name: 'EvaStrong',
         user_action: 'PAY_NOW',
-        return_url: `${process.env.PAYPAL_RETURN_URL}`,
-        cancel_url: `${process.env.PAYPAL_CANCEL_URL}`,
+        return_url: process.env.PAYPAL_RETURN_URL,
+        cancel_url: process.env.PAYPAL_CANCEL_URL,
       },
     };
 
@@ -103,22 +130,25 @@ router.post('/create-order', authMiddleware, async (req, res) => {
         },
       }
     );
-    
-    // Guardar pago en BD
+
     const payment = await Payment.create({
       userId: req.user._id,
       amount,
+      currency: 'USD',
       plan,
       subscriptionPeriod: period,
       status: 'pending',
       paypalOrderId: response.data.id,
+      paymentMethod: 'paypal',
       description,
     });
-    
+
+    console.log(`Orden PayPal creada: Plan ${plan}, Periodo ${period}, Monto: $${amount} USD`);
+
     res.json({
       success: true,
       orderId: response.data.id,
-      approvalLink: response.data.links.find((link) => link.rel === 'approve')?.href,
+      approvalLink: response.data.links.find((l) => l.rel === 'approve')?.href,
       payment: payment._id,
     });
   } catch (error) {
@@ -130,7 +160,9 @@ router.post('/create-order', authMiddleware, async (req, res) => {
   }
 });
 
-// ========== CAPTURAR PAGO EN PAYPAL ==========
+// ============================================================
+// PAYPAL: CAPTURAR ORDEN
+// ============================================================
 
 router.post('/capture-order/:orderId', authMiddleware, async (req, res) => {
   try {
@@ -138,7 +170,6 @@ router.post('/capture-order/:orderId', authMiddleware, async (req, res) => {
 
     const token = await getPayPalToken();
 
-    // Capturar la orden en PayPal
     const response = await axios.post(
       `${PAYPAL_API}/v2/checkout/orders/${orderId}/capture`,
       {},
@@ -152,28 +183,32 @@ router.post('/capture-order/:orderId', authMiddleware, async (req, res) => {
 
     const captureData = response.data;
 
-    // Actualizar pago en BD
-    const payment = await Payment.findOneAndUpdate(
-      { paypalOrderId: orderId },
-      {
-        status: 'completed',
-        paypalTransactionId: captureData.purchase_units[0].payments.captures[0].id,
-        completedAt: new Date(),
-      },
-      { new: true }
-    );
+    // FIX #4: buscar por paypalOrderId (campo ahora en el schema)
+    const payment = await Payment.findOne({ paypalOrderId: orderId });
 
     if (!payment) {
-      return res.status(404).json({
-        success: false,
-        message: 'Pago no encontrado',
-      });
+      return res.status(404).json({ success: false, message: 'Pago no encontrado' });
     }
 
-    // Crear suscripción
+    // FIX #5: verificar que la orden pertenece al usuario autenticado
+    if (payment.userId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'No autorizado' });
+    }
+
+    // FIX #1: usar 'approved' (que si esta en el enum del modelo)
+    payment.status = 'approved';
+    payment.paypalTransactionId = captureData.purchase_units[0].payments.captures[0].id;
+    payment.completedAt = new Date();
+    await payment.save();
+
+    // Verificar que no exista ya una suscripcion activa para este pago
+    const existingSub = await Subscription.findOne({ paymentId: payment._id });
+    if (existingSub) {
+      return res.json({ success: true, message: 'Pago ya procesado', payment, subscription: existingSub });
+    }
+
     const startDate = new Date();
     const endDate = new Date(startDate);
-    
     if (payment.subscriptionPeriod === 'monthly') {
       endDate.setMonth(endDate.getMonth() + 1);
     } else {
@@ -191,18 +226,12 @@ router.post('/capture-order/:orderId', authMiddleware, async (req, res) => {
       autoRenew: true,
     });
 
-    // Actualizar usuario
     await User.findByIdAndUpdate(payment.userId, {
       subscriptionPlan: payment.plan,
       subscriptionStatus: 'active',
     });
 
-    res.json({
-      success: true,
-      message: 'Pago capturado exitosamente',
-      payment,
-      subscription,
-    });
+    res.json({ success: true, message: 'Pago capturado exitosamente', payment, subscription });
   } catch (error) {
     console.error('PayPal Capture Error:', error.response?.data || error.message);
     res.status(500).json({
@@ -212,70 +241,97 @@ router.post('/capture-order/:orderId', authMiddleware, async (req, res) => {
   }
 });
 
-// ========== WEBHOOK PAYPAL ==========
+// ============================================================
+// PAYPAL: WEBHOOK
+// ============================================================
 
 router.post('/webhook', async (req, res) => {
   try {
-    const event = req.body;
+    // FIX #2: verificar firma del webhook antes de procesar
+    if (process.env.PAYPAL_WEBHOOK_ID) {
+      const isValid = await verifyPayPalWebhook(req.headers, req.body);
+      if (!isValid) {
+        console.warn('Webhook PayPal rechazado: firma invalida');
+        return res.status(400).json({ error: 'Firma invalida' });
+      }
+    } else {
+      console.warn('PAYPAL_WEBHOOK_ID no configurado — verificacion de firma omitida');
+    }
 
+    const event = req.body;
     console.log('PayPal Webhook Event:', event.event_type);
 
     switch (event.event_type) {
       case 'CHECKOUT.ORDER.COMPLETED':
-        // Orden completada - captura iniciada
         console.log('Order completed:', event.resource.id);
         break;
 
-      case 'PAYMENT.CAPTURE.COMPLETED':
-        // Pago capturado exitosamente
-        const paymentId = event.resource.custom_id;
+      case 'PAYMENT.CAPTURE.COMPLETED': {
         const transactionId = event.resource.id;
+        const customUserId = event.resource.custom_id;
 
-        const payment = await Payment.findOneAndUpdate(
-          { userId: paymentId },
-          {
-            status: 'completed',
-            paypalTransactionId: transactionId,
-            completedAt: new Date(),
-          }
-        );
+        // FIX #3: buscar por paypalTransactionId primero (ya procesado por capture-order)
+        let payment = await Payment.findOne({ paypalTransactionId: transactionId });
 
         if (payment) {
-          // Crear suscripción
-          const startDate = new Date();
-          const endDate = new Date(startDate);
-          
-          if (payment.subscriptionPeriod === 'monthly') {
-            endDate.setMonth(endDate.getMonth() + 1);
-          } else {
-            endDate.setFullYear(endDate.getFullYear() + 1);
-          }
-
-          await Subscription.create({
-            userId: payment.userId,
-            plan: payment.plan,
-            period: payment.subscriptionPeriod,
-            paymentId: payment._id,
-            startDate,
-            endDate,
-            status: 'active',
-            autoRenew: true,
-          });
-
-          await User.findByIdAndUpdate(payment.userId, {
-            subscriptionPlan: payment.plan,
-            subscriptionStatus: 'active',
-          });
+          // Ya fue procesado por capture-order, no hacer nada
+          console.log('Pago ya procesado por capture-order:', transactionId);
+          break;
         }
+
+        // Seguridad: buscar el pago pendiente mas reciente de este usuario
+        payment = await Payment.findOneAndUpdate(
+          { userId: customUserId, status: 'pending' },
+          {
+            paypalTransactionId: transactionId,
+            status: 'approved',
+            completedAt: new Date(),
+          },
+          { new: true, sort: { createdAt: -1 } }
+        );
+
+        if (!payment) {
+          console.warn('Webhook: pago pendiente no encontrado para usuario:', customUserId);
+          break;
+        }
+
+        // Verificar que no exista ya una suscripcion para este pago
+        const existingSub = await Subscription.findOne({ paymentId: payment._id });
+        if (existingSub) break;
+
+        const startDate = new Date();
+        const endDate = new Date(startDate);
+        if (payment.subscriptionPeriod === 'monthly') {
+          endDate.setMonth(endDate.getMonth() + 1);
+        } else {
+          endDate.setFullYear(endDate.getFullYear() + 1);
+        }
+
+        await Subscription.create({
+          userId: payment.userId,
+          plan: payment.plan,
+          period: payment.subscriptionPeriod,
+          paymentId: payment._id,
+          startDate,
+          endDate,
+          status: 'active',
+          autoRenew: true,
+        });
+
+        await User.findByIdAndUpdate(payment.userId, {
+          subscriptionPlan: payment.plan,
+          subscriptionStatus: 'active',
+        });
+
+        console.log(`Suscripcion creada via webhook para usuario: ${payment.userId}`);
         break;
+      }
 
       case 'PAYMENT.CAPTURE.DECLINED':
-        // Pago rechazado
-        console.log('Payment declined:', event.resource);
+        console.log('Payment declined, transaction id:', event.resource.id);
         break;
 
       case 'PAYMENT.CAPTURE.REFUNDED':
-        // Pago reembolsado
         console.log('Payment refunded:', event.resource.id);
         break;
     }
@@ -287,7 +343,9 @@ router.post('/webhook', async (req, res) => {
   }
 });
 
-// ========== CANCELAR SUSCRIPCIÓN ==========
+// ============================================================
+// CANCELAR SUSCRIPCION
+// ============================================================
 
 router.post('/cancel-subscription', authMiddleware, async (req, res) => {
   try {
@@ -298,90 +356,71 @@ router.post('/cancel-subscription', authMiddleware, async (req, res) => {
     );
 
     if (!subscription) {
-      return res.status(404).json({
-        success: false,
-        message: 'Suscripción no encontrada',
-      });
+      return res.status(404).json({ success: false, message: 'Suscripcion no encontrada' });
     }
 
-    // Actualizar usuario
     await User.findByIdAndUpdate(req.user._id, {
       subscriptionPlan: null,
       subscriptionStatus: 'cancelled',
     });
 
-    res.json({
-      success: true,
-      message: 'Suscripción cancelada exitosamente',
-    });
+    res.json({ success: true, message: 'Suscripcion cancelada exitosamente' });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// ========== OBTENER SUSCRIPCIÓN ==========
+// ============================================================
+// OBTENER SUSCRIPCION DEL USUARIO AUTENTICADO
+// ============================================================
 
 router.get('/subscription', authMiddleware, async (req, res) => {
   try {
     const subscription = await Subscription.findOne({ userId: req.user._id })
       .sort({ createdAt: -1 });
 
-    if (!subscription) {
-      return res.json({
-        success: true,
-        subscription: null,
-      });
-    }
-
-    res.json({
-      success: true,
-      subscription,
-    });
+    res.json({ success: true, subscription: subscription || null });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// ========== MERCADO PAGO: CREAR PREFERENCIA DE PAGO ==========
+// ============================================================
+// MERCADO PAGO: CREAR PREFERENCIA
+// ============================================================
 
 router.post('/mercado-pago/create-preference', authMiddleware, async (req, res) => {
   try {
     const { plan, period, currency = 'COP' } = req.body;
-    
-    if (!['basic', 'premium'].includes(plan)) {
-      return res.status(400).json({ success: false, message: 'Plan inválido' });
+
+    if (!['basic', 'premium', 'exclusive'].includes(plan)) {
+      return res.status(400).json({ success: false, message: 'Plan invalido' });
     }
-    
+
     if (!['monthly', 'annual'].includes(period)) {
-      return res.status(400).json({ success: false, message: 'Período inválido' });
+      return res.status(400).json({ success: false, message: 'Periodo invalido' });
     }
 
     if (!['COP', 'USD'].includes(currency)) {
-      return res.status(400).json({ success: false, message: 'Moneda inválida (COP o USD)' });
+      return res.status(400).json({ success: false, message: 'Moneda invalida (COP o USD)' });
     }
 
-    // Precios en COP (Pesos Colombianos) y USD
     const prices = {
       COP: {
-        basic: { monthly: 39900, annual: 399900 },
-        premium: { monthly: 79900, annual: 799900 },
+        basic:     { monthly: 39900,  annual: 399900  },
+        premium:   { monthly: 79900,  annual: 799900  },
+        exclusive: { monthly: 119900, annual: 1199900 },
       },
       USD: {
-        basic: { monthly: 9.99, annual: 99.99 },
-        premium: { monthly: 19.99, annual: 199.99 },
+        basic:     { monthly: 9.99,  annual: 99.99  },
+        premium:   { monthly: 19.99, annual: 199.99 },
+        exclusive: { monthly: 29.99, annual: 299.99 },
       },
     };
 
     const amount = prices[currency][plan][period];
-    const description = `Suscripción Eva Strong - Plan ${plan.toUpperCase()} (${period === 'monthly' ? 'Mensual' : 'Anual'})`;
+    const description = `Suscripcion Eva Strong - Plan ${plan.toUpperCase()} (${period === 'monthly' ? 'Mensual' : 'Anual'})`;
 
-    // Crear preferencia en Mercado Pago
     const preferenceData = {
       items: [
         {
@@ -409,7 +448,6 @@ router.post('/mercado-pago/create-preference', authMiddleware, async (req, res) 
       },
     };
 
-    // Realizar request a Mercado Pago
     const response = await axios.post(
       `${MERCADO_PAGO_API}/checkout/preferences`,
       preferenceData,
@@ -421,20 +459,19 @@ router.post('/mercado-pago/create-preference', authMiddleware, async (req, res) 
       }
     );
 
-    // Guardar pago en BD
     const payment = await Payment.create({
       userId: req.user._id,
       amount,
-      currency: currency,
+      currency,
       plan,
       subscriptionPeriod: period,
       status: 'pending',
       mercadoPagoPreferenceId: response.data.id,
-      description,
       paymentMethod: 'mercado_pago',
+      description,
     });
 
-    console.log(`✅ Preferencia Mercado Pago creada: Plan ${plan}, Período ${period}, Monto: ${amount} ${currency}`);
+    console.log(`Preferencia Mercado Pago creada: Plan ${plan}, Periodo ${period}, Monto: ${amount} ${currency}`);
 
     res.json({
       success: true,
@@ -451,34 +488,32 @@ router.post('/mercado-pago/create-preference', authMiddleware, async (req, res) 
   }
 });
 
-// ========== MERCADO PAGO: WEBHOOK ==========
+// ============================================================
+// MERCADO PAGO: WEBHOOK
+// ============================================================
 
 router.post('/webhook-mercado-pago', async (req, res) => {
   try {
     const { type, data } = req.body;
-
     console.log('Mercado Pago Webhook Event:', type);
 
     if (type === 'payment') {
-      const paymentId = data.id;
+      const mpPaymentId = data.id;
 
-      // Obtener detalles del pago desde Mercado Pago
+      // Re-fetch desde MP para verificar que el pago es real
       const paymentResponse = await axios.get(
-        `${MERCADO_PAGO_API}/v1/payments/${paymentId}`,
+        `${MERCADO_PAGO_API}/v1/payments/${mpPaymentId}`,
         {
-          headers: {
-            'Authorization': `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}`,
-          },
+          headers: { 'Authorization': `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}` },
         }
       );
 
       const paymentData = paymentResponse.data;
 
-      // Actualizar pago en BD
       const payment = await Payment.findOneAndUpdate(
         { mercadoPagoPreferenceId: paymentData.preference_id },
         {
-          mercadoPagoPaymentId: paymentId,
+          mercadoPagoPaymentId: mpPaymentId,
           mercadoPagoStatus: paymentData.status,
           mercadoPagoStatusDetail: paymentData.status_detail,
           status: paymentData.status === 'approved' ? 'approved' : 'declined',
@@ -491,35 +526,36 @@ router.post('/webhook-mercado-pago', async (req, res) => {
         return res.status(404).json({ success: false, message: 'Pago no encontrado' });
       }
 
-      // Si el pago fue aprobado, crear suscripción
       if (paymentData.status === 'approved') {
-        const startDate = new Date();
-        const endDate = new Date(startDate);
+        // Verificar que no exista ya una suscripcion para este pago
+        const existingSub = await Subscription.findOne({ paymentId: payment._id });
+        if (!existingSub) {
+          const startDate = new Date();
+          const endDate = new Date(startDate);
+          if (payment.subscriptionPeriod === 'monthly') {
+            endDate.setMonth(endDate.getMonth() + 1);
+          } else {
+            endDate.setFullYear(endDate.getFullYear() + 1);
+          }
 
-        if (payment.subscriptionPeriod === 'monthly') {
-          endDate.setMonth(endDate.getMonth() + 1);
-        } else {
-          endDate.setFullYear(endDate.getFullYear() + 1);
+          await Subscription.create({
+            userId: payment.userId,
+            plan: payment.plan,
+            period: payment.subscriptionPeriod,
+            paymentId: payment._id,
+            startDate,
+            endDate,
+            status: 'active',
+            autoRenew: true,
+          });
+
+          await User.findByIdAndUpdate(payment.userId, {
+            subscriptionPlan: payment.plan,
+            subscriptionStatus: 'active',
+          });
+
+          console.log(`Suscripcion creada para usuario: ${payment.userId}`);
         }
-
-        await Subscription.create({
-          userId: payment.userId,
-          plan: payment.plan,
-          period: payment.subscriptionPeriod,
-          paymentId: payment._id,
-          startDate,
-          endDate,
-          status: 'active',
-          autoRenew: true,
-        });
-
-        // Actualizar usuario
-        await User.findByIdAndUpdate(payment.userId, {
-          subscriptionPlan: payment.plan,
-          subscriptionStatus: 'active',
-        });
-
-        console.log(`✅ Suscripción creada para usuario: ${payment.userId}`);
       }
     }
 
@@ -530,7 +566,9 @@ router.post('/webhook-mercado-pago', async (req, res) => {
   }
 });
 
-// ========== MERCADO PAGO: OBTENER ESTADO DEL PAGO ==========
+// ============================================================
+// MERCADO PAGO: ESTADO DEL PAGO
+// ============================================================
 
 router.get('/mercado-pago/payment/:paymentId', authMiddleware, async (req, res) => {
   try {
@@ -539,16 +577,23 @@ router.get('/mercado-pago/payment/:paymentId', authMiddleware, async (req, res) 
     const response = await axios.get(
       `${MERCADO_PAGO_API}/v1/payments/${paymentId}`,
       {
-        headers: {
-          'Authorization': `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}`,
-        },
+        headers: { 'Authorization': `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}` },
       }
     );
 
-    res.json({
-      success: true,
-      payment: response.data,
+    const mpData = response.data;
+
+    // FIX #7: verificar que el pago pertenece al usuario autenticado
+    const payment = await Payment.findOne({
+      mercadoPagoPaymentId: paymentId,
+      userId: req.user._id,
     });
+
+    if (!payment) {
+      return res.status(403).json({ success: false, message: 'No autorizado' });
+    }
+
+    res.json({ success: true, payment: mpData });
   } catch (error) {
     console.error('Mercado Pago Get Payment Error:', error.response?.data || error.message);
     res.status(500).json({

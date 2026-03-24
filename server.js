@@ -1,5 +1,8 @@
 require('dotenv').config();
+const path = require('path');
+const http = require('http');
 const express = require('express');
+const { Server } = require('socket.io');
 const session = require('express-session');
 const passport = require('passport');
 const cors = require('cors');
@@ -34,19 +37,51 @@ const userRoutes = require('./routes/users');
 const paymentRoutes = require('./routes/payments');
 const subscriptionRoutes = require('./routes/subscriptions');
 const trialRoutes = require('./routes/trial');
+const chatRoutes = require('./routes/chat');
+const routineRoutes = require('./routes/routines');
+const exerciseRoutes = require('./routes/exercises');
+const videoRoutes = require('./routes/videos');
+const adminRoutes      = require('./routes/admin');
+const adminPanelRoutes = require('./routes/adminPanel');
+const recipeRoutes = require('./routes/recipes');
+const planRoutes = require('./routes/plans');
+const feedbackRoutes        = require('./routes/feedback');
+const adminContentRoutes    = require('./routes/adminContent');
+const trainerContentRoutes  = require('./routes/trainerContent');
+const trainerPanelRoutes    = require('./routes/trainerPanel');
 
 // Inicializar app
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
+
+// ========== CORS OPTIONS (compartido con Socket.io) ==========
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || '*',
+  credentials: true,
+};
 
 // ========== MIDDLEWARES ==========
 
 // Seguridad
-app.use(helmet());
-app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
-  credentials: true,
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      imgSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'"],
+    },
+  },
 }));
+app.use(cors(corsOptions));
+
+// ========== SOCKET.IO ==========
+const io = new Server(server, { cors: corsOptions });
+require('./socket/chatHandler')(io);
 
 // Rate limiting
 const limiter = rateLimit({
@@ -103,6 +138,49 @@ app.use('/subscriptions', subscriptionRoutes);
 // Período de prueba
 app.use('/trial', trialRoutes);
 
+// Chat en tiempo real
+app.use('/chat', chatRoutes);
+
+// Rutinas
+app.use('/routines', routineRoutes);
+
+// Ejercicios
+app.use('/exercises', exerciseRoutes);
+
+// Videos
+app.use('/videos', videoRoutes);
+
+// Admin API (protegida por JWT)
+app.use('/admin', adminRoutes);
+
+// Panel web administrativo — URL secreta configurada en .env
+const ADMIN_PANEL_PATH = process.env.ADMIN_PANEL_PATH || 'eva-admin-panel-privado';
+app.use(`/${ADMIN_PANEL_PATH}`, adminPanelRoutes);
+console.log(`🔐 Panel admin disponible en: /${ADMIN_PANEL_PATH}`);
+
+// Recetas y Dietas
+app.use('/recipes', recipeRoutes);
+
+// Planes semanales
+app.use('/plans', planRoutes);
+
+// Comentarios / Feedback de usuarias
+app.use('/feedback', feedbackRoutes);
+
+// Gestión de contenido (admin)
+app.use('/admin-content', adminContentRoutes);
+
+// Gestión de contenido (entrenador)
+app.use('/trainer-content', trainerContentRoutes);
+
+// Panel web del entrenador — URL secreta configurada en .env
+const TRAINER_PANEL_PATH = process.env.TRAINER_PANEL_PATH || 'eva-trainer-panel';
+app.use(`/${TRAINER_PANEL_PATH}`, trainerPanelRoutes);
+console.log(`🏋️  Panel entrenador disponible en: /${TRAINER_PANEL_PATH}`);
+
+// Archivos estáticos — fotos y videos subidos
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // ========== MANEJO DE ERRORES ==========
 
 app.use((err, req, res, next) => {
@@ -126,9 +204,13 @@ app.use((req, res) => {
   });
 });
 
+// ========== CRON JOBS ==========
+const { startReminderCron } = require('./utils/subscriptionReminder');
+startReminderCron();
+
 // ========== INICIAR SERVIDOR ==========
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════════╗
 ║   🎉 Eva Strong Backend - Iniciado        ║
@@ -136,8 +218,9 @@ app.listen(PORT, () => {
 ║   Servidor: http://localhost:${PORT}            ║
 ║   Ambiente: ${process.env.NODE_ENV || 'development'}         ║
 ║   Base de datos: Conectada                 ║
+║   Socket.io: Activo                        ║
 ╚════════════════════════════════════════════╝
   `);
 });
 
-module.exports = app;
+module.exports = { app, server };

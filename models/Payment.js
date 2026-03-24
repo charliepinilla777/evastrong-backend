@@ -22,22 +22,26 @@ const paymentSchema = new mongoose.Schema({
     default: 'pending',
   },
   
+  // PayPal
+  paypalOrderId: String,
+  paypalTransactionId: String,
+
   // Mercado Pago
   mercadoPagoPaymentId: String,
   mercadoPagoPreferenceId: String,
   mercadoPagoStatus: String,
   mercadoPagoStatusDetail: String,
-  
+
   // Información de pago
   paymentMethod: {
     type: String,
-    enum: ['credit_card', 'debit_card', 'bank_transfer', 'wallet'],
+    enum: ['credit_card', 'debit_card', 'bank_transfer', 'wallet', 'paypal', 'mercado_pago'],
   },
   
   // Plan/Suscripción
   plan: {
     type: String,
-    enum: ['basic', 'premium'],
+    enum: ['basic', 'premium', 'exclusive'],
     required: true,
   },
   subscriptionPeriod: {
@@ -63,6 +67,7 @@ const paymentSchema = new mongoose.Schema({
     default: Date.now,
   },
   approvedAt: Date,
+  completedAt: Date,
   refundedAt: Date,
   
   // Logs

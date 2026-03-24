@@ -64,8 +64,27 @@ const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
+// Alias para rutas que usan catchAsyncErrors
+const catchAsyncErrors = asyncHandler;
+
+class ValidationError extends AppError {
+  constructor(message) { super(message, 400); }
+}
+
+class NotFoundError extends AppError {
+  constructor(message = 'Recurso no encontrado') { super(message, 404); }
+}
+
+class AuthorizationError extends AppError {
+  constructor(message = 'No autorizado') { super(message, 403); }
+}
+
 module.exports = {
   errorHandler,
   asyncHandler,
+  catchAsyncErrors,
   AppError,
+  ValidationError,
+  NotFoundError,
+  AuthorizationError,
 };

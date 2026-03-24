@@ -97,6 +97,12 @@ const userSchema = new mongoose.Schema({
     mercadoPagoSubscriptionId: String,
   },
   
+  // Rutinas favoritas
+  favoriteRoutines: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Routine',
+  }],
+
   // Contraseña recuperación
   resetPasswordToken: String,
   resetPasswordExpires: Date,
@@ -119,7 +125,7 @@ const userSchema = new mongoose.Schema({
   // Rol de usuario
   role: {
     type: String,
-    enum: ['user', 'admin'],
+    enum: ['user', 'admin', 'trainer'],
     default: 'user',
   },
 }, { timestamps: true });

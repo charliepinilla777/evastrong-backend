@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🛡️ Eva Strong - Sistema de Seguridad Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            animation: fadeInDown 0.8s ease;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            animation: fadeInUp 0.8s ease;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .card-icon {
+            font-size: 2em;
+            margin-right: 15px;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+        }
+
+        .card-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-left: auto;
+        }
+
+        .status.active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .metric {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            transition: background 0.3s ease;
+        }
+
+        .metric:hover {
+            background: #e9ecef;
+        }
+
+        .metric-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .metric-label {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .feature-list {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            margin-bottom: 8px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            transition: background 0.3s ease;
+        }
+
+        .feature-item:hover {
+            background: #e9ecef;
+        }
+
+        .feature-icon {
+            margin-right: 10px;
+            font-size: 1.2em;
+        }
+
+        .flow-diagram {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        .flow-steps {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 30px 0;
+            position: relative;
+        }
+
+        .flow-steps::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #e9ecef;
+            z-index: 0;
+        }
+
+        .flow-step {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            flex: 1;
+        }
+
+        .step-circle {
+            width: 60px;
+            height: 60px;
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 15px;
+            font-size: 1.5em;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            transition: transform 0.3s ease;
+        }
+
+        .flow-step:hover .step-circle {
+            transform: scale(1.1);
+        }
+
+        .step-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .step-desc {
+            font-size: 0.85em;
+            color: #666;
+        }
+
+        .security-features {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .security-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .security-item {
+            display: flex;
+            align-items: start;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .security-item:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+        }
+
+        .security-icon {
+            font-size: 1.5em;
+            margin-right: 15px;
+            margin-top: 5px;
+        }
+
+        .security-content h4 {
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .security-content p {
+            font-size: 0.9em;
+            color: #666;
+            line-height: 1.4;
+        }
+
+        .terminal {
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            margin-top: 20px;
+            font-size: 0.9em;
+            line-height: 1.5;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .terminal-line {
+            margin-bottom: 5px;
+        }
+
+        .terminal-line.error {
+            color: #ff6b6b;
+        }
+
+        .terminal-line.success {
+            color: #51cf66;
+        }
+
+        .terminal-line.info {
+            color: #74c0fc;
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 600;
+            margin-left: 5px;
+        }
+
+        .badge.new {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .badge.secure {
+            background: #51cf66;
+            color: white;
+        }
+
+        .badge.premium {
+            background: #ffd43b;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ Eva Strong Backend</h1>
+            <p>Sistema de Seguridad y Control de Suscripciones</p>
+        </div>
+
+        <div class="dashboard">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: #d4edda; color: #155724;">🔐</div>
+                    <div class="card-title">Autenticación</div>
+                    <span class="status active">ACTIVO</span>
+                </div>
+                <div class="metrics">
+                    <div class="metric">
+                        <div class="metric-value">15m</div>
+                        <div class="metric-label">Token Access</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">7d</div>
+                        <div class="metric-label">Refresh Token</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">256</div>
+                        <div class="metric-label">Tokens Activos</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">100%</div>
+                        <div class="metric-label">Backend Control</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: #fff3cd; color: #856404;">💰</div>
+                    <div class="card-title">Suscripciones</div>
+                    <span class="status warning">CONTROLADO</span>
+                </div>
+                <div class="metrics">
+                    <div class="metric">
+                        <div class="metric-value">ms</div>
+                        <div class="metric-label">Precisión Temporal</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">12</div>
+                        <div class="metric-label">Features</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">3</div>
+                        <div class="metric-label">Planes</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">∞</div>
+                        <div class="metric-label">Revocación</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: #f8d7da; color: #721c24;">📊</div>
+                    <div class="card-title">Seguridad</div>
+                    <span class="status danger">MONITOREADO</span>
+                </div>
+                <div class="metrics">
+                    <div class="metric">
+                        <div class="metric-value">24/7</div>
+                        <div class="metric-label">Auditoría</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">RT</div>
+                        <div class="metric-label">Detección</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">90d</div>
+                        <div class="metric-label">Logs TTL</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">🔒</div>
+                        <div class="metric-label">Encriptado</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flow-diagram">
+            <h2 style="text-align: center; margin-bottom: 10px;">🔄 Flujo de Autenticación Segura</h2>
+            <p style="text-align: center; color: #666; margin-bottom: 30px;">Proceso completo de login y control de acceso</p>
+            
+            <div class="flow-steps">
+                <div class="flow-step">
+                    <div class="step-circle">👤</div>
+                    <div class="step-title">Login</div>
+                    <div class="step-desc">Usuario ingresa credenciales</div>
+                </div>
+                
+                <div class="flow-step">
+                    <div class="step-circle">🔑</div>
+                    <div class="step-title">Generate</div>
+                    <div class="step-desc">Backend genera tokens</div>
+                </div>
+                
+                <div class="flow-step">
+                    <div class="step-circle">🛡️</div>
+                    <div class="step-title">Verify</div>
+                    <div class="step-desc">Verificación en cada request</div>
+                </div>
+                
+                <div class="flow-step">
+                    <div class="step-circle">🔄</div>
+                    <div class="step-title">Refresh</div>
+                    <div class="step-desc">Renovación automática</div>
+                </div>
+                
+                <div class="flow-step">
+                    <div class="step-circle">✅</div>
+                    <div class="step-title">Access</div>
+                    <div class="step-desc">Acceso concedido/denegado</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="security-features">
+            <h2 style="text-align: center; margin-bottom: 10px;">🛡️ Características de Seguridad Implementadas</h2>
+            <p style="text-align: center; color: #666; margin-bottom: 30px;">Protección multicapa para máxima seguridad</p>
+            
+            <div class="security-grid">
+                <div class="security-item">
+                    <div class="security-icon">🔐</div>
+                    <div class="security-content">
+                        <h4>Tokens JWT Cortos <span class="badge secure">15 min</span></h4>
+                        <p>Minimiza el daño en caso de compromiso con tokens de acceso de corta duración</p>
+                    </div>
+                </div>
+                
+                <div class="security-item">
+                    <div class="security-icon">🔄</div>
+                    <div class="security-content">
+                        <h4>Refresh Automático <span class="badge new">Nuevo</span></h4>
+                        <p>Renovación transparente sin interrupción del usuario</p>
+                    </div>
+                </div>
+                
+                <div class="security-item">
+                    <div class="security-icon">💾</div>
+                    <div class="security-content">
+                        <h4>Storage en BD</h4>
+                        <p>Control de estado centralizado con capacidad de revocación inmediata</p>
+                    </div>
+                </div>
+                
+                <div class="security-item">
+                    <div class="security-icon">🚪</div>
+                    <div class="security-content">
+                        <h4>Logout Forzado</h4>
+                        <p>Capacidad de cerrar sesión en todos los dispositivos</p>
+                    </div>
+                </div>
+                
+                <div class="security-item">
+                    <div class="security-icon">📱</div>
+                    <div class="security-content">
+                        <h4>Device Fingerprinting</h4>
+                        <p>Detección de anomalías por dispositivo y ubicación</p>
+                    </div>
+                </div>
+                
+                <div class="security-item">
+                    <div class="security-icon">⏱️</div>
+                    <div class="security-content">
+                        <h4>Control Temporal <span class="badge premium">Precisión ms</span></h4>
+                        <p>Verificación por milisegundos para control exacto de suscripciones</p>
+                    </div>
+                </div>
+                
+                <div class="security-item">
+                    <div class="security-icon">🎯</div>
+                    <div class="security-content">
+                        <h4>Acceso Granular</h4>
+                        <p>Control por features específicos con límites de uso</p>
+                    </div>
+                </div>
+                
+                <div class="security-item">
+                    <div class="security-icon">📊</div>
+                    <div class="security-content">
+                        <h4>Auditoría Completa</h4>
+                        <p>Logs detallados de todas las acciones de seguridad</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 30px;">
+            <div class="card-header">
+                <div class="card-icon" style="background: #e3f2fd; color: #1976d2;">🌐</div>
+                <div class="card-title">Estado del Sistema</div>
+                <span class="status active pulse">ONLINE</span>
+            </div>
+            
+            <div class="terminal" id="terminal">
+                <div class="terminal-line info">🚀 Eva Strong Backend - Sistema de Seguridad</div>
+                <div class="terminal-line success">✓ MongoDB conectado</div>
+                <div class="terminal-line success">✓ Servidor corriendo en http://localhost:5000</div>
+                <div class="terminal-line success">✓ Sistema de tokens activo</div>
+                <div class="terminal-line success">✓ Control de suscripciones operativo</div>
+                <div class="terminal-line success">✓ Auditoría de seguridad habilitada</div>
+                <div class="terminal-line info">📊 Estadísticas en tiempo real:</div>
+                <div class="terminal-line">   - Tokens activos: 256</div>
+                <div class="terminal-line">   - Suscripciones premium: 89</div>
+                <div class="terminal-line">   - Eventos de seguridad hoy: 1,247</div>
+                <div class="terminal-line">   - Intentos de acceso denegados: 23</div>
+                <div class="terminal-line success">✓ Sistema seguro y monitoreado</div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 30px;">
+            <div class="card-header">
+                <div class="card-icon" style="background: #f3e5f5; color: #7b1fa2;">🎯</div>
+                <div class="card-title">Features Disponibles por Plan</div>
+            </div>
+            
+            <ul class="feature-list">
+                <li class="feature-item">
+                    <span class="feature-icon">✅</span>
+                    <span><strong>Free:</strong> Progress Tracking, Community Access</span>
+                </li>
+                <li class="feature-item">
+                    <span class="feature-icon">💎</span>
+                    <span><strong>Basic:</strong> Basic Workouts, Video Library, Nutrition Plans</span>
+                </li>
+                <li class="feature-item">
+                    <span class="feature-icon">👑</span>
+                    <span><strong>Premium:</strong> Premium Workouts, Personal Training, Live Sessions, Custom Routines, Priority Support, Offline Mode, HD Videos</span>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Simulación de logs en tiempo real
+        const terminal = document.getElementById('terminal');
+        const logs = [
+            { type: 'info', message: '🔐 Nuevo login desde 192.168.1.100' },
+            { type: 'success', message: '✅ Token refresh exitoso para usuario premium' },
+            { type: 'error', message: '❌ Intento de acceso denegado: feature no disponible' },
+            { type: 'info', message: '📊 Dashboard de seguridad accedido por admin' },
+            { type: 'success', message: '✅ Nueva suscripción premium activada' },
+            { type: 'info', message: '🔄 Verificación de suscripción: activa por 23 días' },
+            { type: 'error', message: '❌ Token expirado - solicitando refresh' },
+            { type: 'success', message: '✅ Acceso concedido a feature premium_workouts' },
+            { type: 'info', message: '📱 Nuevo dispositivo detectado: iPhone 14 Pro' },
+            { type: 'success', message: '✅ Logout seguro completado' }
+        ];
+
+        let logIndex = 0;
+        
+        function addLog() {
+            if (logIndex < logs.length) {
+                const log = logs[logIndex];
+                const logLine = document.createElement('div');
+                logLine.className = `terminal-line ${log.type}`;
+                logLine.textContent = `[${new Date().toLocaleTimeString()}] ${log.message}`;
+                terminal.appendChild(logLine);
+                
+                // Auto-scroll al final
+                terminal.scrollTop = terminal.scrollHeight;
+                
+                logIndex++;
+            } else {
+                // Reiniciar ciclo
+                setTimeout(() => {
+                    terminal.innerHTML = `
+                        <div class="terminal-line info">🚀 Eva Strong Backend - Sistema de Seguridad</div>
+                        <div class="terminal-line success">✓ MongoDB conectado</div>
+                        <div class="terminal-line success">✓ Servidor corriendo en http://localhost:5000</div>
+                        <div class="terminal-line success">✓ Sistema de tokens activo</div>
+                        <div class="terminal-line success">✓ Control de suscripciones operativo</div>
+                        <div class="terminal-line success">✓ Auditoría de seguridad habilitada</div>
+                    `;
+                    logIndex = 0;
+                }, 5000);
+            }
+        }
+
+        // Agregar logs cada 2 segundos
+        setInterval(addLog, 2000);
+
+        // Animación de métricas
+        document.querySelectorAll('.metric-value').forEach(metric => {
+            metric.addEventListener('mouseenter', function() {
+                this.style.transform = 'scale(1.2)';
+                this.style.transition = 'transform 0.3s ease';
+            });
+            
+            metric.addEventListener('mouseleave', function() {
+                this.style.transform = 'scale(1)';
+            });
+        });
+
+        // Simulación de actualización de métricas
+        function updateMetrics() {
+            const metrics = document.querySelectorAll('.metric-value');
+            const tokensMetric = metrics[2]; // Tokens Activos
+            const currentValue = parseInt(tokensMetric.textContent);
+            const change = Math.floor(Math.random() * 5) - 2; // -2 a +2
+            const newValue = Math.max(250, currentValue + change);
+            tokensMetric.textContent = newValue;
+        }
+
+        setInterval(updateMetrics, 5000);
+    </script>
+</body>
+</html>

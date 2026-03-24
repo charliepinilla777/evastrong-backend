@@ -53,6 +53,12 @@ const subscriptionSchema = new mongoose.Schema({
     default: true,
   },
   
+  // Recordatorios enviados
+  reminderSent5d: {
+    type: Boolean,
+    default: false,
+  },
+
   // Cancelación
   cancelledAt: Date,
   cancelReason: String,

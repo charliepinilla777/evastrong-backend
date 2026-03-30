@@ -162,18 +162,17 @@ const routineTemplateSchema = new mongoose.Schema({
     }],
   },
 
-  // Reglas de ajuste
+  // Reglas de ajuste (Mixed para permitir claves numéricas y objetos anidados libres)
   adjustmentRules: {
-    timeMultipliers: {
-      10: 0.7,    // Para rutinas de 10 min
-      15: 1.0,    // Para rutinas de 15 min (base)
-      20: 1.3     // Para rutinas de 20 min
+    type: mongoose.Schema.Types.Mixed,
+    default: {
+      timeMultipliers: { 10: 0.7, 15: 1.0, 20: 1.3 },
+      cycleAdjustments: {
+        principiante: { min: 1, max: 2 },
+        intermedio: { min: 2, max: 3 },
+        avanzado: { min: 3, max: 5 },
+      },
     },
-    cycleAdjustments: {
-      principiante: { min: 1, max: 2 },
-      intermedio: { min: 2, max: 3 },
-      avanzado: { min: 3, max: 5 }
-    }
   },
 
   // Metadatos

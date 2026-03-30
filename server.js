@@ -45,6 +45,8 @@ const adminRoutes      = require('./routes/admin');
 const adminPanelRoutes = require('./routes/adminPanel');
 const recipeRoutes = require('./routes/recipes');
 const planRoutes = require('./routes/plans');
+const dietRecommendationRoutes = require('./routes/dietRecommendations');
+const routineRecommendationRoutes = require('./routes/routineRecommendations');
 const feedbackRoutes        = require('./routes/feedback');
 const adminContentRoutes    = require('./routes/adminContent');
 const trainerContentRoutes  = require('./routes/trainerContent');
@@ -163,6 +165,12 @@ app.use('/recipes', recipeRoutes);
 
 // Planes semanales
 app.use('/plans', planRoutes);
+
+// Recomendaciones de dieta personalizadas
+app.use('/diet-recommendations', dietRecommendationRoutes);
+
+// Recomendaciones de rutinas personalizadas
+app.use('/routine-recommendations', routineRecommendationRoutes);
 
 // Comentarios / Feedback de usuarias
 app.use('/feedback', feedbackRoutes);

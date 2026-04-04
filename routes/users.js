@@ -37,6 +37,28 @@ router.get('/profile', authMiddleware, async (req, res) => {
   }
 });
 
+// ========== ROL DEL USUARIO ==========
+
+router.get('/role', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('role subscription').lean();
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    }
+    res.json({
+      success: true,
+      user: {
+        _id: user._id,
+        role: user.role || 'user',
+        subscriptionPlan: user.subscription?.plan || 'free',
+        subscriptionActive: user.subscription?.active || false,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // ========== ACTUALIZAR PERFIL ==========
 
 router.put('/profile', authMiddleware, [
@@ -121,27 +143,33 @@ router.post('/change-password', authMiddleware, [
 });
 
 // ========== OBTENER USUARIO POR ID ==========
+// Solo el propio usuario o un admin puede ver el perfil completo
 
-router.get('/:userId', async (req, res) => {
+router.get('/:userId', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.params.userId);
-    
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'Usuario no encontrado',
-      });
+    const { userId } = req.params;
+
+    // Validar formato ObjectId para evitar errores de cast
+    if (!userId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: 'ID de usuario inválido' });
     }
-    
-    res.json({
-      success: true,
-      user: user.toJSON(),
-    });
+
+    // Solo el propio usuario o un admin puede ver el perfil completo
+    const isSelf  = req.user._id.toString() === userId;
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isSelf && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'No autorizado' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    }
+
+    res.json({ success: true, user: user.toJSON() });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

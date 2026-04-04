@@ -3,6 +3,8 @@ const { loadAdditionalTemplates2 } = require('./additionalTemplates2');
 const { loadAdditionalTemplates3 } = require('./additionalTemplates3');
 const { loadAdditionalTemplates4 } = require('./additionalTemplates4');
 const { loadAdditionalTemplates5 } = require('./additionalTemplates5');
+const { loadFichas5to8 } = require('./additionalTemplates6');
+const { loadFichas1to4 } = require('./additionalTemplates7');
 
 // Función principal para cargar todas las plantillas adicionales
 async function loadAllAdditionalTemplates() {
@@ -24,7 +26,13 @@ async function loadAllAdditionalTemplates() {
     
     console.log('\n📦 Cargando lote 5 (Grupo 9-10)...');
     await loadAdditionalTemplates5();
-    
+
+    console.log('\n📦 Cargando lote 6 (Fichas 5-8 bilingüe)...');
+    await loadFichas5to8();
+
+    console.log('\n📦 Cargando lote 7 (Fichas 1-4 bilingüe)...');
+    await loadFichas1to4();
+
     console.log('\n✅ Todas las plantillas adicionales se cargaron exitosamente');
     console.log('\n🎯 Resumen de plantillas cargadas:');
     console.log('📋 Grupo 1: 18-35 años, principiante, rodilla sana (2 plantillas)');

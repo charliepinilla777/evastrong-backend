@@ -30,6 +30,15 @@ function getAllowedLevels(plan) {
   return ['free'];
 }
 
+function localizePlan(planObj, lang) {
+  if (lang !== 'en') return planObj;
+  if (planObj.titleEn)       planObj.title       = planObj.titleEn;
+  if (planObj.descriptionEn) planObj.description = planObj.descriptionEn;
+  if (planObj.themeEn)       planObj.theme       = planObj.themeEn;
+  delete planObj.titleEn; delete planObj.descriptionEn; delete planObj.themeEn;
+  return planObj;
+}
+
 /**
  * GET /plans
  * Retorna los 7 planes semanales (siempre visibles)
@@ -38,25 +47,30 @@ function getAllowedLevels(plan) {
 router.get('/', catchAsyncErrors(async (req, res) => {
   const userPlan = await getUserPlan(req);
   const allowedLevels = getAllowedLevels(userPlan);
+  const lang = (req.query.lang || req.headers['accept-language'] || 'es').slice(0, 2).toLowerCase();
 
   const plans = await Plan.find({ isActive: true })
     .sort({ dayNumber: 1 })
     .populate({
       path: 'meals.recipe',
-      select: 'name category imageUrl accessLevel nutrition prepTime cookTime',
+      select: 'name nameEn category imageUrl accessLevel nutrition prepTime cookTime',
     });
 
-  // Marcar comidas bloqueadas según el plan del usuario
+  // Marcar comidas bloqueadas y localizar
   const enriched = plans.map((plan) => {
     const planObj = plan.toObject();
-    planObj.meals = planObj.meals.map((meal) => ({
-      ...meal,
-      isLocked: meal.recipe
-        ? !allowedLevels.includes(meal.recipe.accessLevel)
-        : false,
-    }));
+    planObj.meals = planObj.meals.map((meal) => {
+      if (lang === 'en' && meal.recipe?.nameEn) meal.recipe.name = meal.recipe.nameEn;
+      if (meal.recipe) delete meal.recipe.nameEn;
+      return {
+        ...meal,
+        isLocked: meal.recipe
+          ? !allowedLevels.includes(meal.recipe.accessLevel)
+          : false,
+      };
+    });
     planObj.userPlan = userPlan;
-    return planObj;
+    return localizePlan(planObj, lang);
   });
 
   res.json({ success: true, data: enriched });
@@ -116,7 +130,13 @@ router.put('/:id', verifyToken, catchAsyncErrors(async (req, res) => {
   if (!user || user.role !== 'admin') {
     throw new AuthorizationError('Solo admins pueden editar planes');
   }
-  const plan = await Plan.findByIdAndUpdate(req.params.id, req.body, {
+  // Whitelist de campos editables para evitar inyección de campos del sistema
+  const allowed = ['title', 'titleEn', 'description', 'descriptionEn', 'dayNumber', 'theme', 'themeEn', 'meals', 'isActive'];
+  const update  = {};
+  for (const key of allowed) {
+    if (req.body[key] !== undefined) update[key] = req.body[key];
+  }
+  const plan = await Plan.findByIdAndUpdate(req.params.id, { $set: update }, {
     new: true, runValidators: true,
   });
   if (!plan) throw new NotFoundError('Plan no encontrado');

@@ -74,4 +74,9 @@ const subscriptionSchema = new mongoose.Schema({
   },
 }, { timestamps: true });
 
+// Índices para búsquedas frecuentes
+subscriptionSchema.index({ userId: 1, status: 1 });
+subscriptionSchema.index({ userId: 1, endDate: 1 });
+subscriptionSchema.index({ status: 1, endDate: -1 });
+
 module.exports = mongoose.model('Subscription', subscriptionSchema);

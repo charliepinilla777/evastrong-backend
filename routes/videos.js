@@ -64,9 +64,9 @@ const upload = multer({
  * Obtener todos los videos con filtros y paginación
  */
 router.get('/', catchAsyncErrors(async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
-  const skip = (page - 1) * limit;
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
+  const skip  = (page - 1) * limit;
 
   const filters = { isActive: true, visibility: 'public' };
 
@@ -80,7 +80,9 @@ router.get('/', catchAsyncErrors(async (req, res) => {
   }
 
   if (req.query.exerciseName) {
-    filters.exerciseName = { $regex: req.query.exerciseName, $options: 'i' };
+    // Escapar caracteres especiales de regex para evitar ReDoS
+    const safeExerciseName = req.query.exerciseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    filters.exerciseName = { $regex: safeExerciseName, $options: 'i' };
   }
 
   if (req.query.search) {
@@ -140,9 +142,9 @@ router.get('/:id', catchAsyncErrors(async (req, res) => {
     );
   }
 
-  // Incrementar vistas
-  video.views += 1;
-  await video.save();
+  // Incrementar vistas con $inc (una sola operación atómica, sin cargar el documento completo)
+  await Video.updateOne({ _id: video._id }, { $inc: { views: 1 } });
+  video.views = (video.views || 0) + 1; // refleja el cambio en la respuesta
 
   res.json({
     success: true,
@@ -196,9 +198,9 @@ router.post(
   catchAsyncErrors(async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      // Eliminar archivo si hay error de validación
+      // Eliminar archivo si hay error de validación (async)
       if (req.file) {
-        fs.unlinkSync(req.file.path);
+        fs.unlink(req.file.path, () => {});
       }
       throw new ValidationError('Validación fallida');
     }
@@ -234,10 +236,10 @@ router.post(
         mimeType: req.file.mimetype,
         size: req.file.size,
       },
-      muscleGroups: muscleGroups ? JSON.parse(muscleGroups) : [],
-      equipment: equipment ? JSON.parse(equipment) : [],
-      accessLevel: accessLevel || 'premium',
-      tags: tags ? JSON.parse(tags) : [],
+      muscleGroups: (() => { try { return muscleGroups ? JSON.parse(muscleGroups) : []; } catch { return []; } })(),
+      equipment:    (() => { try { return equipment    ? JSON.parse(equipment)    : []; } catch { return []; } })(),
+      accessLevel:  accessLevel || 'premium',
+      tags:         (() => { try { return tags         ? JSON.parse(tags)         : []; } catch { return []; } })(),
       visibility: 'unlisted', // Por defecto sin listar hasta revisión
     });
 
@@ -374,9 +376,13 @@ router.delete(
       );
     }
 
-    // Eliminar archivo del servidor
-    if (video.video?.filepath && fs.existsSync(video.video.filepath)) {
-      fs.unlinkSync(video.video.filepath);
+    // Eliminar archivo del servidor (async para no bloquear el event loop)
+    if (video.video?.filepath) {
+      fs.unlink(video.video.filepath, (err) => {
+        if (err && err.code !== 'ENOENT') {
+          console.error('Error al eliminar archivo de video:', err.message);
+        }
+      });
     }
 
     await Video.findByIdAndDelete(req.params.id);

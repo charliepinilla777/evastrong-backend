@@ -8,7 +8,13 @@ const authMiddleware = require('../middleware/auth');
 
 // Middleware para verificar suscripción activa
 const requireSubscription = async (req, res, next) => {
-  if (!req.user.hasActiveSubscription()) {
+  const isActive =
+    typeof req.user?.hasActiveSubscription === 'function'
+      ? req.user.hasActiveSubscription()
+      : req.user?.subscription?.active === true &&
+        new Date() < new Date(req.user?.subscription?.endDate);
+
+  if (!isActive) {
     return res.status(403).json({
       success: false,
       message: 'Necesitas una suscripción activa para usar el chat',
@@ -101,15 +107,29 @@ router.post('/rooms', async (req, res) => {
   }
 });
 
-// GET /chat/rooms/public — Listar salas grupales disponibles
+// GET /chat/rooms/public — Listar salas grupales disponibles (con paginación)
 router.get('/rooms/public', async (req, res) => {
   try {
-    const rooms = await ChatRoom.find({ type: 'group' })
-      .populate('participants', 'name avatar')
-      .populate('createdBy', 'name')
-      .sort({ lastMessageAt: -1 });
+    const page  = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit = Math.min(50, parseInt(req.query.limit) || 20);
+    const skip  = (page - 1) * limit;
 
-    res.json({ success: true, data: rooms });
+    const [rooms, total] = await Promise.all([
+      ChatRoom.find({ type: 'group' })
+        .populate('participants', 'name avatar')
+        .populate('createdBy', 'name')
+        .sort({ lastMessageAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      ChatRoom.countDocuments({ type: 'group' }),
+    ]);
+
+    res.json({
+      success: true,
+      data: rooms,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -9,8 +9,8 @@ const router = express.Router();
 
 router.get('/current', authMiddleware, async (req, res) => {
   try {
-    const subscription = await Subscription.findOne({ userId: req.user._id });
-    
+    const subscription = await Subscription.findOne({ userId: req.user._id }).lean();
+
     if (!subscription) {
       return res.json({
         success: true,
@@ -18,13 +18,18 @@ router.get('/current', authMiddleware, async (req, res) => {
         message: 'Usuario sin suscripción',
       });
     }
-    
-    // Verificar si expiró
-    if (subscription.status === 'active' && new Date() > subscription.endDate) {
+
+    // Verificar si expiró — actualizar solo si realmente cambió de estado
+    // para no escribir en DB en cada lectura (evita N+1 writes)
+    const isExpired = subscription.status === 'active' && new Date() > subscription.endDate;
+    if (isExpired) {
+      await Subscription.updateOne(
+        { _id: subscription._id },
+        { $set: { status: 'expired' } }
+      );
       subscription.status = 'expired';
-      await subscription.save();
     }
-    
+
     res.json({
       success: true,
       subscription,
@@ -85,18 +90,17 @@ router.post('/change-plan', authMiddleware, async (req, res) => {
       });
     }
     
-    // Cambiar plan
-    subscription.plan = newPlan;
-    await subscription.save();
-    
-    // Actualizar usuario
-    const user = await User.findById(req.user._id);
-    user.subscription.plan = newPlan;
-    await user.save();
-    
+    // Actualizar ambos modelos en paralelo (atómico, evita inconsistencia si uno falla)
+    await Promise.all([
+      Subscription.updateOne({ _id: subscription._id }, { plan: newPlan }),
+      User.updateOne({ _id: req.user._id }, { 'subscription.plan': newPlan }),
+    ]);
+
+    subscription.plan = newPlan; // refleja el cambio en la respuesta
+
     res.json({
       success: true,
-      message: 'Plan cambiadoexitosamente',
+      message: 'Plan cambiado exitosamente',
       subscription,
     });
   } catch (error) {
@@ -174,12 +178,26 @@ router.post('/renew', authMiddleware, async (req, res) => {
     } else {
       newEndDate.setFullYear(newEndDate.getFullYear() + 1);
     }
-    
+
+    // Actualizar Subscription y User en paralelo (evita inconsistencia)
+    await Promise.all([
+      Subscription.updateOne(
+        { _id: subscription._id },
+        { endDate: newEndDate, nextBillingDate: newEndDate, status: 'active' }
+      ),
+      User.updateOne(
+        { _id: req.user._id },
+        {
+          subscriptionStatus: 'active',
+          'subscription.active':  true,
+          'subscription.endDate': newEndDate,
+        }
+      ),
+    ]);
+
     subscription.endDate = newEndDate;
-    subscription.nextBillingDate = newEndDate;
-    subscription.status = 'active';
-    await subscription.save();
-    
+    subscription.status  = 'active';
+
     res.json({
       success: true,
       message: 'Suscripción renovada',

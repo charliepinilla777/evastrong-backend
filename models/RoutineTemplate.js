@@ -69,6 +69,17 @@ const routineTemplateSchema = new mongoose.Schema({
   },
 
   // Estructura de bloques
+  // Traducciones al inglés
+  nameEn: { type: String, trim: true, maxlength: 100 },
+  descriptionEn: { type: String, trim: true, maxlength: 500 },
+
+  // Nivel de acceso al plan
+  accessLevel: {
+    type: String,
+    enum: ['free', 'basic', 'premium', 'exclusive'],
+    default: 'free',
+  },
+
   blocks: {
     calentamiento: [{
       exerciseId: {
@@ -79,7 +90,9 @@ const routineTemplateSchema = new mongoose.Schema({
         type: String,
         required: true,
       },
+      nameEn: String,
       shortDescription: String,
+      shortDescriptionEn: String,
       type: {
         type: String,
         enum: ['fuerza', 'cardio_suave', 'movilidad', 'cardio_intenso', 'flexibilidad', 'equilibrio'],
@@ -109,7 +122,9 @@ const routineTemplateSchema = new mongoose.Schema({
         type: String,
         required: true,
       },
+      nameEn: String,
       shortDescription: String,
+      shortDescriptionEn: String,
       type: {
         type: String,
         enum: ['fuerza', 'cardio_suave', 'movilidad', 'cardio_intenso', 'flexibilidad', 'equilibrio'],
@@ -139,7 +154,9 @@ const routineTemplateSchema = new mongoose.Schema({
         type: String,
         required: true,
       },
+      nameEn: String,
       shortDescription: String,
+      shortDescriptionEn: String,
       type: {
         type: String,
         enum: ['fuerza', 'cardio_suave', 'movilidad', 'cardio_intenso', 'flexibilidad', 'equilibrio'],

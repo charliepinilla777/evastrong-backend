@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Payment = require('../models/Payment');
 const Subscription = require('../models/Subscription');
 const Feedback = require('../models/Feedback');
+const WorkoutHistory = require('../models/WorkoutHistory');
 
 // Aplicar middleware de autenticación a todas las rutas
 router.use(adminAuth);
@@ -33,18 +34,20 @@ router.get('/users/stats', async (req, res) => {
       createdAt: { $gte: today, $lt: tomorrow }
     });
 
-    // Top usuarios (simulado - necesitaríamos modelo de achievements y performance)
-    const topUsers = await User.find({ active: true })
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .select('name avatar email createdAt')
-      .lean();
+    // Top usuarios por entrenamientos completados
+    const topUsersRaw = await WorkoutHistory.aggregate([
+      { $group: { _id: '$user', workouts: { $sum: 1 } } },
+      { $sort: { workouts: -1 } },
+      { $limit: 5 },
+      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'userDoc' } },
+      { $unwind: { path: '$userDoc', preserveNullAndEmptyArrays: true } },
+      { $project: { name: '$userDoc.name', avatar: '$userDoc.avatar', workouts: 1 } },
+    ]);
 
-    const topUsersFormatted = topUsers.map((user, index) => ({
-      name: user.name,
-      achievements: Math.floor(Math.random() * 50) + 10, // Simulado
-      performance: (Math.random() * 20 + 80).toFixed(1), // Simulado
-      avatar: user.avatar || '👤'
+    const topUsersFormatted = topUsersRaw.map(u => ({
+      name:         u.name    || 'Usuario',
+      achievements: u.workouts,
+      avatar:       u.avatar  || '👤',
     }));
 
     const responseData = {
@@ -150,32 +153,32 @@ router.get('/revenue/stats', async (req, res) => {
 // ============= ESTADÍSTICAS DE LOGROS =============
 router.get('/achievements/stats', async (req, res) => {
   try {
-    // Simulado - necesitaríamos modelo de Achievement
-    const totalAchievements = 12543;
-    const achievementsUnlockedToday = Math.floor(Math.random() * 50) + 20;
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
 
-    // Usuarios recientes para simular logros
-    const recentUsers = await User.find({})
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .select('name createdAt')
-      .lean();
+    const [totalAchievements, achievementsUnlockedToday, recentWorkouts] = await Promise.all([
+      WorkoutHistory.countDocuments(),
+      WorkoutHistory.countDocuments({ completedAt: { $gte: startOfToday } }),
+      WorkoutHistory.find()
+        .sort({ completedAt: -1 })
+        .limit(5)
+        .populate('user', 'name')
+        .select('user routineName completedAt')
+        .lean(),
+    ]);
 
-    const achievements = ['Rutina Perfecta', 'Primera Semana', 'Consistencia', 'Fuerza Máxima', 'Velocidad'];
-    const recentAchievements = recentUsers.map(user => ({
-      userName: user.name,
-      achievement: achievements[Math.floor(Math.random() * achievements.length)],
-      time: `Hace ${Math.floor((new Date() - user.createdAt) / 60000)} min`
-    }));
+    const recentAchievements = recentWorkouts.map(w => {
+      const minutesAgo = Math.floor((new Date() - new Date(w.completedAt)) / 60000);
+      return {
+        userName: w.user?.name || 'Usuario',
+        achievement: w.routineName || 'Entrenamiento completado',
+        time: minutesAgo < 60
+          ? `Hace ${minutesAgo} min`
+          : `Hace ${Math.floor(minutesAgo / 60)} h`,
+      };
+    });
 
-    const responseData = {
-      totalAchievements,
-      achievementsUnlockedToday,
-      recentAchievements
-    };
-
-    console.log('Achievements stats sent:', responseData);
-    res.json(responseData);
+    res.json({ totalAchievements, achievementsUnlockedToday, recentAchievements });
   } catch (error) {
     console.error('Error en /achievements/stats:', error);
     res.status(500).json({
@@ -239,40 +242,55 @@ router.get('/subscriptions/stats', async (req, res) => {
 // ============= ESTADÍSTICAS DE TRÁFICO =============
 router.get('/traffic/stats', async (req, res) => {
   try {
-    // Simulado - necesitaríamos sistema de analytics
-    const dailyActiveUsers = await User.countDocuments({
-      lastLogin: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const [dailyActiveUsers, workoutsByDay, avgDurationResult] = await Promise.all([
+      User.countDocuments({ lastLogin: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }),
+      WorkoutHistory.aggregate([
+        { $match: { completedAt: { $gte: sevenDaysAgo } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$completedAt' } },
+            sessions: { $sum: 1 },
+            users:    { $addToSet: '$user' },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]),
+      WorkoutHistory.aggregate([
+        { $match: { durationMinutes: { $exists: true, $gt: 0 } } },
+        { $group: { _id: null, avg: { $avg: '$durationMinutes' } } },
+      ]),
+    ]);
+
+    const avgSessionDuration = avgDurationResult[0]?.avg
+      ? Number(avgDurationResult[0].avg).toFixed(1)
+      : 0;
+
+    // Build trafficTrend from real data, fill missing days with 0
+    const trendMap = {};
+    workoutsByDay.forEach(d => {
+      trendMap[d._id] = { sessions: d.sessions, users: d.users.length };
     });
-
-    const sessionCount = dailyActiveUsers * 2; // Simulado
-    const avgSessionDuration = (Math.random() * 10 + 20).toFixed(1);
-
-    // Tendencia de tráfico últimos 7 días (simulado)
     const trafficTrend = [];
     for (let i = 6; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      date.setHours(0, 0, 0, 0);
-      
-      const users = Math.floor(Math.random() * 500 + 1000);
-      const sessions = Math.floor(users * (Math.random() * 0.5 + 1.5));
-      
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+      const key = d.toISOString().slice(0, 10);
       trafficTrend.push({
-        date: date.toISOString(),
-        users,
-        sessions
+        date:     d.toISOString(),
+        users:    trendMap[key]?.users    || 0,
+        sessions: trendMap[key]?.sessions || 0,
       });
     }
 
-    const responseData = {
+    res.json({
       dailyActiveUsers,
-      sessionCount,
+      sessionCount: workoutsByDay.reduce((s, d) => s + d.sessions, 0),
       avgSessionDuration: parseFloat(avgSessionDuration),
-      trafficTrend
-    };
-
-    console.log('Traffic stats sent:', responseData);
-    res.json(responseData);
+      trafficTrend,
+    });
   } catch (error) {
     console.error('Error en /traffic/stats:', error);
     res.status(500).json({
@@ -315,40 +333,37 @@ router.patch('/feedback/:id/read', async (req, res) => {
 // ============= ESTADÍSTICAS DE FEEDBACK =============
 router.get('/feedback/stats', async (req, res) => {
   try {
-    // Simulado - necesitaríamos modelo de Feedback
-    const satisfactionScore = (Math.random() * 0.5 + 4.2).toFixed(1);
-    const pendingResponses = Math.floor(Math.random() * 20) + 5;
+    const [pendingResponses, avgArr, recentFeedbackDocs] = await Promise.all([
+      Feedback.countDocuments({ status: { $in: ['unread', 'pending'] } }),
+      Feedback.aggregate([{ $group: { _id: null, avg: { $avg: '$rating' } } }]),
+      Feedback.find()
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .select('userName rating comment createdAt')
+        .lean(),
+    ]);
 
-    // Usuarios recientes para simular feedback
-    const recentUsers = await User.find({})
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .select('name email createdAt')
-      .lean();
+    const satisfactionScore = avgArr[0]?.avg
+      ? Number(avgArr[0].avg).toFixed(1)
+      : '0.0';
 
-    const comments = [
-      '¡Excelente app! Me encanta',
-      'Muy buena para mantenerse en forma',
-      'Las rutinas son geniales',
-      'Necesita más ejercicios',
-      'Perfecta para mi nivel'
-    ];
+    const recentFeedback = recentFeedbackDocs.map(f => {
+      const minutesAgo = Math.floor((new Date() - new Date(f.createdAt)) / 60000);
+      return {
+        userName: f.userName || 'Usuario',
+        rating:   f.rating   || 0,
+        comment:  f.comment  || '',
+        time: minutesAgo < 60
+          ? `Hace ${minutesAgo} min`
+          : `Hace ${Math.floor(minutesAgo / 60)} h`,
+      };
+    });
 
-    const recentFeedback = recentUsers.map(user => ({
-      userName: user.name,
-      rating: Math.floor(Math.random() * 2) + 4, // 4-5 estrellas
-      comment: comments[Math.floor(Math.random() * comments.length)],
-      time: `Hace ${Math.floor((new Date() - user.createdAt) / 60000)} min`
-    }));
-
-    const responseData = {
+    res.json({
       satisfactionScore: parseFloat(satisfactionScore),
       pendingResponses,
-      recentFeedback
-    };
-
-    console.log('Feedback stats sent:', responseData);
-    res.json(responseData);
+      recentFeedback,
+    });
   } catch (error) {
     console.error('Error en /feedback/stats:', error);
     res.status(500).json({

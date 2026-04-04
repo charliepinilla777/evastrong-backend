@@ -79,4 +79,14 @@ const paymentSchema = new mongoose.Schema({
   webhookData: mongoose.Schema.Types.Mixed,
 }, { timestamps: true });
 
+// Índices para historial de pagos y lookups de webhooks
+paymentSchema.index({ userId: 1, createdAt: -1 });
+paymentSchema.index({ status: 1, createdAt: -1 });
+
+// sparse: true porque no todos los pagos usan todos los proveedores
+// unique: true para evitar pagos duplicados si el webhook llega dos veces
+paymentSchema.index({ paypalOrderId: 1 },         { sparse: true, unique: true });
+paymentSchema.index({ mercadoPagoPaymentId: 1 },  { sparse: true, unique: true });
+paymentSchema.index({ wompiTransactionId: 1 },    { sparse: true, unique: true });
+
 module.exports = mongoose.model('Payment', paymentSchema);

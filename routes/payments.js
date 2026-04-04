@@ -8,6 +8,51 @@ const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
 
+// ─── Helper: activar suscripción de forma atómica ────────────────────────────
+// Usa findOneAndUpdate con upsert=false + unique index en paymentId para
+// garantizar que dos webhooks simultáneos no creen dos suscripciones.
+async function activateSubscription(payment) {
+  const startDate = new Date();
+  const endDate   = new Date(startDate);
+  if (payment.subscriptionPeriod === 'monthly') {
+    endDate.setMonth(endDate.getMonth() + 1);
+  } else {
+    endDate.setFullYear(endDate.getFullYear() + 1);
+  }
+
+  // $setOnInsert garantiza que si ya existe no se sobreescriba (idempotente)
+  const result = await Subscription.findOneAndUpdate(
+    { paymentId: payment._id },
+    {
+      $setOnInsert: {
+        userId:   payment.userId,
+        plan:     payment.plan,
+        period:   payment.subscriptionPeriod,
+        paymentId: payment._id,
+        startDate,
+        endDate,
+        status:    'active',
+        autoRenew: true,
+      },
+    },
+    { upsert: true, new: false }
+  );
+
+  // Si result es null → se insertó (nuevo); si tiene valor → ya existía (skip)
+  if (result !== null) return; // ya procesado
+
+  await User.findByIdAndUpdate(payment.userId, {
+    subscriptionPlan:   payment.plan,
+    subscriptionStatus: 'active',
+    'subscription.plan':   payment.plan,
+    'subscription.active': true,
+    'subscription.endDate': endDate,
+  });
+
+  console.log(`✅ Suscripción activada para usuario: ${payment.userId}`);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // PayPal API endpoints
 const PAYPAL_API = process.env.PAYPAL_MODE === 'sandbox'
   ? 'https://api.sandbox.paypal.com'
@@ -296,35 +341,7 @@ router.post('/webhook', async (req, res) => {
           break;
         }
 
-        // Verificar que no exista ya una suscripcion para este pago
-        const existingSub = await Subscription.findOne({ paymentId: payment._id });
-        if (existingSub) break;
-
-        const startDate = new Date();
-        const endDate = new Date(startDate);
-        if (payment.subscriptionPeriod === 'monthly') {
-          endDate.setMonth(endDate.getMonth() + 1);
-        } else {
-          endDate.setFullYear(endDate.getFullYear() + 1);
-        }
-
-        await Subscription.create({
-          userId: payment.userId,
-          plan: payment.plan,
-          period: payment.subscriptionPeriod,
-          paymentId: payment._id,
-          startDate,
-          endDate,
-          status: 'active',
-          autoRenew: true,
-        });
-
-        await User.findByIdAndUpdate(payment.userId, {
-          subscriptionPlan: payment.plan,
-          subscriptionStatus: 'active',
-        });
-
-        console.log(`Suscripcion creada via webhook para usuario: ${payment.userId}`);
+        await activateSubscription(payment);
         break;
       }
 
@@ -528,35 +545,7 @@ router.post('/webhook-mercado-pago', async (req, res) => {
       }
 
       if (paymentData.status === 'approved') {
-        // Verificar que no exista ya una suscripcion para este pago
-        const existingSub = await Subscription.findOne({ paymentId: payment._id });
-        if (!existingSub) {
-          const startDate = new Date();
-          const endDate = new Date(startDate);
-          if (payment.subscriptionPeriod === 'monthly') {
-            endDate.setMonth(endDate.getMonth() + 1);
-          } else {
-            endDate.setFullYear(endDate.getFullYear() + 1);
-          }
-
-          await Subscription.create({
-            userId: payment.userId,
-            plan: payment.plan,
-            period: payment.subscriptionPeriod,
-            paymentId: payment._id,
-            startDate,
-            endDate,
-            status: 'active',
-            autoRenew: true,
-          });
-
-          await User.findByIdAndUpdate(payment.userId, {
-            subscriptionPlan: payment.plan,
-            subscriptionStatus: 'active',
-          });
-
-          console.log(`Suscripcion creada para usuario: ${payment.userId}`);
-        }
+        await activateSubscription(payment);
       }
     }
 
@@ -771,24 +760,29 @@ router.post('/wompi/webhook', async (req, res) => {
   try {
     const event = req.body;
 
-    // Verificar firma del webhook
-    // SHA256(transaction.id + transaction.status + transaction.amount_in_cents + timestamp + eventsSecret)
+    // Verificar firma del webhook (obligatorio en producción)
     const eventsSecret = process.env.WOMPI_EVENTS_SECRET;
-    if (eventsSecret && event.signature) {
+    if (!eventsSecret && process.env.NODE_ENV === 'production') {
+      console.error('❌ WOMPI_EVENTS_SECRET no configurado en producción');
+      return res.status(500).json({ error: 'Configuración de webhook incompleta' });
+    }
+
+    if (eventsSecret) {
+      if (!event.signature) {
+        console.warn('Wompi webhook: sin firma — rechazado');
+        return res.status(401).json({ error: 'Firma requerida' });
+      }
       const { properties, checksum } = event.signature;
       const timestamp = event.timestamp;
-
       const values = properties.map((prop) => {
         const parts = prop.split('.');
         return parts.reduce((obj, key) => obj?.[key], event.data);
       });
-
       const toHash = values.join('') + timestamp + eventsSecret;
       const expected = crypto.createHash('sha256').update(toHash).digest('hex');
-
       if (expected !== checksum) {
-        console.warn('Wompi webhook: firma invalida');
-        return res.status(401).json({ error: 'Firma invalida' });
+        console.warn('Wompi webhook: firma inválida');
+        return res.status(401).json({ error: 'Firma inválida' });
       }
     }
 
@@ -811,34 +805,7 @@ router.post('/wompi/webhook', async (req, res) => {
       );
 
       if (payment && transaction.status === 'APPROVED') {
-        const existingSub = await Subscription.findOne({ paymentId: payment._id });
-        if (!existingSub) {
-          const startDate = new Date();
-          const endDate = new Date(startDate);
-          if (payment.subscriptionPeriod === 'monthly') {
-            endDate.setMonth(endDate.getMonth() + 1);
-          } else {
-            endDate.setFullYear(endDate.getFullYear() + 1);
-          }
-
-          await Subscription.create({
-            userId: payment.userId,
-            plan: payment.plan,
-            period: payment.subscriptionPeriod,
-            paymentId: payment._id,
-            startDate,
-            endDate,
-            status: 'active',
-            autoRenew: true,
-          });
-
-          await User.findByIdAndUpdate(payment.userId, {
-            subscriptionPlan: payment.plan,
-            subscriptionStatus: 'active',
-          });
-
-          console.log(`Suscripcion Wompi activada via webhook: ${payment.userId}`);
-        }
+        await activateSubscription(payment);
       }
     }
 

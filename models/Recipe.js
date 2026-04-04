@@ -66,6 +66,13 @@ const recipeSchema = new Schema({
   isActive: { type: Boolean, default: true },
   isFeatured: { type: Boolean, default: false },
 
+  // Traducciones al inglés (opcionales)
+  nameEn: { type: String, trim: true, maxlength: 100 },
+  descriptionEn: { type: String, trim: true, maxlength: 500 },
+  ingredientsEn: [ingredientSchema],
+  stepsEn: [{ type: String, trim: true }],
+  tagsEn: [String],
+
   // Auditoría
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },

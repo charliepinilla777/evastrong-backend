@@ -52,7 +52,10 @@ router.get('/apple/callback',
 
 router.post('/register', [
   body('email').isEmail().normalizeEmail(),
-  body('password').isLength({ min: 8 }).withMessage('Mínimo 8 caracteres'),
+  body('password')
+    .isLength({ min: 8 })
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('Mínimo 8 caracteres, una mayúscula, una minúscula y un número'),
   body('name').trim().not().isEmpty(),
 ], async (req, res) => {
   try {

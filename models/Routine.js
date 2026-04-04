@@ -44,6 +44,10 @@ const routineSchema = new Schema({
   },
   instructorName: String,
 
+  // Traducciones al inglés (opcionales)
+  titleEn: { type: String, trim: true, maxlength: 100 },
+  descriptionEn: { type: String, trim: true, maxlength: 500 },
+
   // Descripción detallada
   objectives: [String], // Objetivos de la rutina
   targetMuscles: [String], // Músculos objetivo
@@ -62,94 +66,58 @@ const routineSchema = new Schema({
   // Ejercicios en la rutina (estructura modular)
   blocks: {
     calentamiento: [{
-      exerciseId: {
-        type: String,
-        required: true,
-      },
-      name: {
-        type: String,
-        required: true,
-      },
+      exerciseId: { type: String, required: true },
+      name: { type: String, required: true },
+      nameEn: String,
       shortDescription: String,
+      shortDescriptionEn: String,
       type: {
         type: String,
         enum: ['fuerza', 'cardio_suave', 'movilidad', 'cardio_intenso', 'flexibilidad', 'equilibrio'],
       },
       zone: String,
       timeSeconds: Number,
+      sets: { type: Number, default: 1, min: 1 },
       repetitions: String,
-      restSeconds: {
-        type: Number,
-        default: 0,
-      },
-      kneeFriendly: {
-        type: Boolean,
-        default: true,
-      },
-      order: {
-        type: Number,
-        default: 0,
-      },
+      restSeconds: { type: Number, default: 0 },
+      kneeFriendly: { type: Boolean, default: true },
+      order: { type: Number, default: 0 },
     }],
     principal: [{
-      exerciseId: {
-        type: String,
-        required: true,
-      },
-      name: {
-        type: String,
-        required: true,
-      },
+      exerciseId: { type: String, required: true },
+      name: { type: String, required: true },
+      nameEn: String,
       shortDescription: String,
+      shortDescriptionEn: String,
       type: {
         type: String,
         enum: ['fuerza', 'cardio_suave', 'movilidad', 'cardio_intenso', 'flexibilidad', 'equilibrio'],
       },
       zone: String,
       timeSeconds: Number,
+      sets: { type: Number, default: 3, min: 1 },
       repetitions: String,
-      restSeconds: {
-        type: Number,
-        default: 20,
-      },
-      kneeFriendly: {
-        type: Boolean,
-        default: true,
-      },
-      order: {
-        type: Number,
-        default: 0,
-      },
+      restSeconds: { type: Number, default: 20 },
+      kneeFriendly: { type: Boolean, default: true },
+      order: { type: Number, default: 0 },
     }],
     enfriamiento: [{
-      exerciseId: {
-        type: String,
-        required: true,
-      },
-      name: {
-        type: String,
-        required: true,
-      },
+      exerciseId: { type: String, required: true },
+      name: { type: String, required: true },
+      nameEn: String,
       shortDescription: String,
+      shortDescriptionEn: String,
       type: {
         type: String,
         enum: ['fuerza', 'cardio_suave', 'movilidad', 'cardio_intenso', 'flexibilidad', 'equilibrio'],
       },
       zone: String,
       timeSeconds: Number,
+      sets: { type: Number, default: 1, min: 1 },
       repetitions: String,
-      restSeconds: {
-        type: Number,
-        default: 0,
-      },
-      kneeFriendly: {
-        type: Boolean,
-        default: true,
-      },
-      order: {
-        type: Number,
-        default: 0,
-      },
+      restSeconds: { type: Number, default: 0 },
+      kneeFriendly: { type: Boolean, default: true },
+      order: { type: Number, default: 0 },
     }],
   },
   

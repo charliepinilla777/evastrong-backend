@@ -64,7 +64,7 @@ router.get('/routines', async (req, res) => {
 // POST /admin-content/routines
 router.post('/routines', async (req, res) => {
   try {
-    const { title, description, category, difficulty, duration, accessLevel, videoUrl, thumbnail, tags } = req.body;
+    const { title, titleEn, description, descriptionEn, category, difficulty, duration, accessLevel, videoUrl, thumbnail, tags } = req.body;
 
     if (!title || !duration) {
       return res.status(400).json({ success: false, error: 'Título y duración son obligatorios.' });
@@ -72,7 +72,9 @@ router.post('/routines', async (req, res) => {
 
     const routine = await Routine.create({
       title,
+      titleEn:     titleEn     || '',
       description: description || '',
+      descriptionEn: descriptionEn || '',
       category:    category    || 'other',
       difficulty:  difficulty  || 'beginner',
       duration:    Number(duration),
@@ -90,10 +92,19 @@ router.post('/routines', async (req, res) => {
   }
 });
 
-// PATCH /admin-content/routines/:id  (activar/desactivar o destacar)
+// PATCH /admin-content/routines/:id  (solo campos permitidos)
 router.patch('/routines/:id', async (req, res) => {
   try {
-    const updated = await Routine.findByIdAndUpdate(req.params.id, req.body, { new: true }).lean();
+    // Whitelist: solo campos que el admin puede modificar desde este endpoint
+    const allowed = ['isActive', 'isFeatured', 'accessLevel', 'category', 'difficulty', 'titleEn', 'descriptionEn'];
+    const update  = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) update[key] = req.body[key];
+    }
+    if (Object.keys(update).length === 0) {
+      return res.status(400).json({ success: false, error: 'No hay campos válidos para actualizar' });
+    }
+    const updated = await Routine.findByIdAndUpdate(req.params.id, { $set: update }, { new: true }).lean();
     if (!updated) return res.status(404).json({ success: false, error: 'Rutina no encontrada' });
     res.json({ success: true, routine: updated });
   } catch (e) {
@@ -187,7 +198,7 @@ router.delete('/videos/:id', async (req, res) => {
     // Borrar archivo local si existe
     if (v.video?.filename) {
       const fp = path.join(videosDir, v.video.filename);
-      if (fs.existsSync(fp)) fs.unlinkSync(fp);
+      fs.unlink(fp, (err) => { if (err && err.code !== 'ENOENT') console.error('Error borrando archivo:', err.message); });
     }
 
     await Video.findByIdAndDelete(req.params.id);
@@ -227,7 +238,7 @@ router.get('/photos', (req, res) => {
 router.delete('/photos/:filename', (req, res) => {
   try {
     const fp = path.join(photosDir, req.params.filename);
-    if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    fs.unlink(fp, (err) => { if (err && err.code !== 'ENOENT') console.error('Error borrando archivo:', err.message); });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });

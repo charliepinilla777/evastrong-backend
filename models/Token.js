@@ -77,14 +77,21 @@ const tokenSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
-}, { 
-  timestamps: true,
-  // Índices para rendimiento
-  index: { userId: 1, isActive: 1 },
-  index: { refreshToken: 1, isActive: 1 },
-  index: { accessTokenExpiresAt: 1 },
-  index: { refreshTokenExpiresAt: 1 }
+}, {
+  timestamps: true
 });
+
+// Índices compuestos para búsquedas de tokens activos
+tokenSchema.index({ userId: 1, isActive: 1 });
+tokenSchema.index({ refreshToken: 1, isActive: 1 });
+tokenSchema.index({ accessToken: 1 });
+tokenSchema.index({ accessTokenExpiresAt: 1 });
+tokenSchema.index({ refreshTokenExpiresAt: 1 });
+// TTL: elimina automáticamente tokens inactivos después de 30 días
+tokenSchema.index(
+  { updatedAt: 1 },
+  { expireAfterSeconds: 30 * 24 * 60 * 60, partialFilterExpression: { isActive: false } }
+);
 
 // Métodos estáticos
 tokenSchema.statics.findActiveRefreshToken = function(refreshToken) {

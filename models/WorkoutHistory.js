@@ -34,4 +34,10 @@ const workoutHistorySchema = new mongoose.Schema({
   },
 });
 
+// Índices para historial del usuario y estadísticas de rutinas
+workoutHistorySchema.index({ user: 1, completedAt: -1 });
+workoutHistorySchema.index({ routineId: 1 });
+workoutHistorySchema.index({ completedAt: -1 });
+workoutHistorySchema.index({ user: 1, routineId: 1, completedAt: -1 });
+
 module.exports = mongoose.model('WorkoutHistory', workoutHistorySchema);

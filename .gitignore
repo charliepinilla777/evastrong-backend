@@ -1,4 +1,6 @@
 node_modules/
+.claude/
+*.md.bak
 .env
 .env.local
 .env.*.local

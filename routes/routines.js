@@ -17,6 +17,26 @@ const {
 
 const router = express.Router();
 
+// ── Localización de rutina (ES por defecto, EN si lang=en) ─────────────────
+function localizeRoutine(routine, lang) {
+  if (lang !== 'en') return routine;
+  const obj = routine.toObject ? routine.toObject() : { ...routine };
+  if (obj.titleEn)       obj.title       = obj.titleEn;
+  if (obj.descriptionEn) obj.description = obj.descriptionEn;
+  // Localizar ejercicios en bloques
+  ['calentamiento', 'principal', 'enfriamiento'].forEach(block => {
+    if (Array.isArray(obj.blocks?.[block])) {
+      obj.blocks[block] = obj.blocks[block].map(ex => ({
+        ...ex,
+        name:             ex.nameEn             || ex.name,
+        shortDescription: ex.shortDescriptionEn || ex.shortDescription,
+      }));
+    }
+  });
+  delete obj.titleEn; delete obj.descriptionEn;
+  return obj;
+}
+
 // ========== OBTENER RUTINAS ==========
 
 /**
@@ -24,9 +44,10 @@ const router = express.Router();
  * Obtener todas las rutinas (público)
  */
 router.get('/', catchAsyncErrors(async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
-  const skip = (page - 1) * limit;
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
+  const skip  = (page - 1) * limit;
+  const lang  = (req.query.lang || req.headers['accept-language'] || 'es').slice(0, 2).toLowerCase();
 
   // Filtros
   const filters = { isActive: true };
@@ -43,18 +64,19 @@ router.get('/', catchAsyncErrors(async (req, res) => {
     filters.duration = req.query.duration;
   }
 
-  const routines = await Routine.find(filters)
-    .populate('instructor', 'name avatar')
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit);
-
-  const total = await Routine.countDocuments(filters);
+  const [routines, total] = await Promise.all([
+    Routine.find(filters)
+      .populate('instructor', 'name avatar')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    Routine.countDocuments(filters),
+  ]);
 
   res.json({
     success: true,
     data: {
-      routines,
+      routines: routines.map(r => localizeRoutine(r, lang)),
       pagination: {
         page,
         limit,
@@ -213,7 +235,7 @@ router.post('/custom',
  * Devuelve el historial de entrenamientos del usuario. Requiere auth.
  */
 router.get('/history', authenticateToken, catchAsyncErrors(async (req, res) => {
-  const limit = parseInt(req.query.limit) || 30;
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 30));
 
   const records = await WorkoutHistory.find({ user: req.user.id })
     .sort({ completedAt: -1 })
@@ -260,6 +282,7 @@ router.get('/favorites', authenticateToken, catchAsyncErrors(async (req, res) =>
  * Obtener una rutina específica
  */
 router.get('/:id', catchAsyncErrors(async (req, res) => {
+  const lang    = (req.query.lang || req.headers['accept-language'] || 'es').slice(0, 2).toLowerCase();
   const routine = await Routine.findById(req.params.id).populate(
     'instructor',
     'name avatar email'
@@ -284,13 +307,12 @@ router.get('/:id', catchAsyncErrors(async (req, res) => {
     );
   }
 
-  // Incrementar vistas
-  routine.views += 1;
-  await routine.save();
+  // Incrementar vistas (atómico)
+  await Routine.updateOne({ _id: routine._id }, { $inc: { views: 1 } });
 
   res.json({
     success: true,
-    data: routine,
+    data: localizeRoutine(routine, lang),
   });
 }));
 
@@ -533,19 +555,31 @@ router.post(
 
     const { rating } = req.body;
 
-    // Actualizar rating promedio
-    const totalRating = routine.rating * routine.ratingCount + rating;
-    routine.ratingCount += 1;
-    routine.rating = totalRating / routine.ratingCount;
-
-    await routine.save();
+    // Actualizar rating promedio de forma atómica (pipeline update, MongoDB 4.2+)
+    const updated = await Routine.findByIdAndUpdate(
+      req.params.id,
+      [
+        {
+          $set: {
+            ratingCount: { $add: ['$ratingCount', 1] },
+            rating: {
+              $divide: [
+                { $add: [{ $multiply: ['$rating', '$ratingCount'] }, rating] },
+                { $add: ['$ratingCount', 1] },
+              ],
+            },
+          },
+        },
+      ],
+      { new: true }
+    );
 
     res.json({
       success: true,
       message: 'Valoración registrada',
       data: {
-        rating: routine.rating,
-        ratingCount: routine.ratingCount,
+        rating: updated.rating,
+        ratingCount: updated.ratingCount,
       },
     });
   })
@@ -564,13 +598,23 @@ router.post('/history', authenticateToken, catchAsyncErrors(async (req, res) => 
     throw new ValidationError('routineName y durationMinutes son requeridos');
   }
 
+  const duration = parseInt(durationMinutes);
+  if (isNaN(duration) || duration < 1 || duration > 1440) {
+    throw new ValidationError('durationMinutes debe estar entre 1 y 1440 minutos');
+  }
+
+  const calories = caloriesEstimated ? parseInt(caloriesEstimated) : Math.round(duration * 8);
+  if (isNaN(calories) || calories < 0 || calories > 10000) {
+    throw new ValidationError('caloriesEstimated fuera de rango válido');
+  }
+
   const record = await WorkoutHistory.create({
     user: req.user.id,
-    routineName,
+    routineName: String(routineName).trim().slice(0, 200),
     routineId: routineId || null,
     category: category || 'general',
-    durationMinutes,
-    caloriesEstimated: caloriesEstimated || Math.round(durationMinutes * 8),
+    durationMinutes: duration,
+    caloriesEstimated: calories,
   });
 
   res.status(201).json({

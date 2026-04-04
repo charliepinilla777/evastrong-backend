@@ -48,12 +48,11 @@ const corsOptions = {
     if (isAllowed) {
       callback(null, true);
     } else {
+      // En desarrollo logueamos el origen rechazado, pero NO lo permitimos
       if (process.env.NODE_ENV === 'development') {
         console.warn(`⚠️  Origen CORS rechazado: ${origin}`);
-        callback(null, true); // Permitir en desarrollo
-      } else {
-        callback(new Error('No permitido por CORS'));
       }
+      callback(new Error('No permitido por CORS'));
     }
   },
   

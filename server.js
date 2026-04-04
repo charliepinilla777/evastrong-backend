@@ -1,3 +1,9 @@
+/**
+ * EvaStrong Backend — Main Server
+ * Copyright (c) 2024-2025 Carlos Pinilla. All Rights Reserved.
+ * Unauthorized copying, modification or distribution is strictly prohibited.
+ * See LICENSE file for full terms.
+ */
 require('dotenv').config();
 const path = require('path');
 const http = require('http');
@@ -85,21 +91,47 @@ app.use(cors(corsOptions));
 const io = new Server(server, { cors: corsOptions });
 require('./socket/chatHandler')(io);
 
-// Rate limiting
+// Rate limiting — global (API general)
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // máximo 100 requests por IP
-  message: 'Demasiadas solicitudes, intenta más tarde',
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Demasiadas solicitudes, intenta más tarde.' },
 });
 app.use(limiter);
+
+// Rate limiting — autenticación (login/registro: max 10 intentos / 15 min)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Demasiados intentos de acceso. Espera 15 minutos.' },
+  skipSuccessfulRequests: true, // No penaliza requests exitosos
+});
+
+// Rate limiting — pagos (max 5 / 10 min por IP)
+const paymentLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Demasiadas operaciones de pago. Intenta en 10 minutos.' },
+});
 
 // Body parser
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Session
+const sessionSecret = process.env.SESSION_SECRET || process.env.JWT_SECRET;
+if (!sessionSecret) {
+  console.error('❌ SESSION_SECRET o JWT_SECRET no configurado. La sesión no es segura.');
+  if (process.env.NODE_ENV === 'production') process.exit(1);
+}
 app.use(session({
-  secret: process.env.JWT_SECRET || 'tu-secreto-seguro',
+  secret: sessionSecret || 'dev-insecure-secret-change-me',
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -120,19 +152,33 @@ connectDB();
 
 // ========== RUTAS ==========
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date() });
+// Health check — verifica conexión real a MongoDB
+app.get('/health', async (req, res) => {
+  try {
+    const admin = mongoose.connection.db?.admin();
+    if (!admin) {
+      return res.status(503).json({ status: 'UNHEALTHY', db: 'not_connected', timestamp: new Date() });
+    }
+    await admin.ping();
+    res.json({
+      status: 'OK',
+      db: 'connected',
+      uptime: Math.floor(process.uptime()),
+      timestamp: new Date(),
+    });
+  } catch (err) {
+    res.status(503).json({ status: 'UNHEALTHY', db: 'error', error: err.message, timestamp: new Date() });
+  }
 });
 
-// Autenticación
-app.use('/auth', authRoutes);
+// Autenticación (rate limit estricto)
+app.use('/auth', authLimiter, authRoutes);
 
 // Usuarios
 app.use('/users', userRoutes);
 
-// Pagos
-app.use('/payments', paymentRoutes);
+// Pagos (rate limit de pagos)
+app.use('/payments', paymentLimiter, paymentRoutes);
 
 // Suscripciones
 app.use('/subscriptions', subscriptionRoutes);

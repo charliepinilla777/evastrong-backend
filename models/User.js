@@ -216,4 +216,13 @@ userSchema.methods.toJSON = function () {
   return user;
 };
 
+// Índices para consultas frecuentes de usuarios
+userSchema.index({ role: 1 });
+userSchema.index({ lastLogin: -1 });
+userSchema.index({ createdAt: -1 });
+userSchema.index({ active: 1, lastLogin: -1 });
+// TTL automático para tokens de verificación/reset ya expirados
+userSchema.index({ emailVerificationExpires: 1 }, { expireAfterSeconds: 0, sparse: true });
+userSchema.index({ resetPasswordExpires: 1 },     { expireAfterSeconds: 0, sparse: true });
+
 module.exports = mongoose.model('User', userSchema);

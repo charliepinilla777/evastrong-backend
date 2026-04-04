@@ -95,11 +95,15 @@ router.post('/routines', async (req, res) => {
 
 router.patch('/routines/:id', async (req, res) => {
   try {
-    const routine = await Routine.findByIdAndUpdate(
-      req.params.id,
-      { isActive: req.body.isActive },
-      { new: true }
-    );
+    const allowed = ['isActive', 'titleEn', 'descriptionEn'];
+    const update  = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) update[key] = req.body[key];
+    }
+    if (Object.keys(update).length === 0) {
+      return res.status(400).json({ success: false, error: 'No hay campos válidos para actualizar' });
+    }
+    const routine = await Routine.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
     if (!routine) return res.status(404).json({ success: false, error: 'Rutina no encontrada' });
     res.json({ success: true, routine });
   } catch (e) {
@@ -168,7 +172,7 @@ router.delete('/videos/:id', async (req, res) => {
     const video = await Video.findByIdAndDelete(req.params.id);
     if (video?.filepath) {
       const fullPath = path.join(videosDir, video.filepath);
-      if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+      fs.unlink(fullPath, (err) => { if (err && err.code !== 'ENOENT') console.error('Error borrando archivo:', err.message); });
     }
     res.json({ success: true });
   } catch (e) {
@@ -205,7 +209,7 @@ router.get('/photos', (req, res) => {
 router.delete('/photos/:filename', (req, res) => {
   try {
     const filePath = path.join(photosDir, req.params.filename);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    fs.unlink(filePath, (err) => { if (err && err.code !== 'ENOENT') console.error('Error borrando archivo:', err.message); });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });

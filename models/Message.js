@@ -28,4 +28,11 @@ const messageSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Índices para paginación y consultas de mensajes por sala
+messageSchema.index({ room: 1, createdAt: -1 });
+messageSchema.index({ sender: 1, createdAt: -1 });
+messageSchema.index({ room: 1, readBy: 1 });
+// TTL: elimina mensajes después de 1 año
+messageSchema.index({ createdAt: 1 }, { expireAfterSeconds: 365 * 24 * 60 * 60 });
+
 module.exports = mongoose.model('Message', messageSchema);

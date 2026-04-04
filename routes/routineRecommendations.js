@@ -12,6 +12,53 @@ const {
 
 const router = express.Router();
 
+// ========== HELPERS DE LOCALIZACIÓN ==========
+
+function getLang(req) {
+  return (req.query.lang || req.headers['accept-language'] || 'es').slice(0, 2).toLowerCase();
+}
+
+function getAllowedAccessLevels(plan) {
+  if (plan === 'premium') return ['free', 'basic', 'premium', 'exclusive'];
+  if (plan === 'basic' || plan === 'trial') return ['free', 'basic'];
+  return ['free'];
+}
+
+function localizeExercise(ex, lang) {
+  if (lang !== 'en') return ex;
+  const e = { ...ex };
+  if (e.nameEn) e.name = e.nameEn;
+  if (e.shortDescriptionEn) e.shortDescription = e.shortDescriptionEn;
+  delete e.nameEn; delete e.shortDescriptionEn;
+  return e;
+}
+
+function localizeTemplate(template, lang) {
+  if (lang !== 'en') return template;
+  const obj = template.toObject ? template.toObject() : { ...template };
+  if (obj.nameEn) obj.name = obj.nameEn;
+  if (obj.descriptionEn) obj.description = obj.descriptionEn;
+  ['calentamiento', 'principal', 'enfriamiento'].forEach(block => {
+    if (obj.blocks && obj.blocks[block]) {
+      obj.blocks[block] = obj.blocks[block].map(ex => localizeExercise(ex, lang));
+    }
+  });
+  delete obj.nameEn; delete obj.descriptionEn;
+  return obj;
+}
+
+function localizePersonalizedRoutine(routine, template, lang) {
+  if (lang !== 'en') return routine;
+  if (template.nameEn) routine.name = template.nameEn;
+  if (template.descriptionEn) routine.description = template.descriptionEn;
+  ['calentamiento', 'principal', 'enfriamiento'].forEach(block => {
+    if (routine.blocks && routine.blocks[block]) {
+      routine.blocks[block] = routine.blocks[block].map(ex => localizeExercise(ex, lang));
+    }
+  });
+  return routine;
+}
+
 // ========== OBTENER RUTINA RECOMENDADA ==========
 
 /**
@@ -39,9 +86,14 @@ router.get('/personalized', authenticateToken, catchAsyncErrors(async (req, res)
     dailyTime: user.dailyTime || 15
   };
 
+  const lang = getLang(req);
+  const userPlan = user.subscription?.plan || 'free';
+  const allowedAccessLevels = getAllowedAccessLevels(userPlan);
+
   // Buscar plantillas compatibles
   const compatibleTemplates = await RoutineTemplate.find({
     isActive: true,
+    accessLevel: { $in: allowedAccessLevels },
     'targetProfile.ageRange': userProfile.ageRange,
     'targetProfile.level': userProfile.fitnessLevel,
     'targetProfile.constitutions': userProfile.constitution,
@@ -57,9 +109,10 @@ router.get('/personalized', authenticateToken, catchAsyncErrors(async (req, res)
 
   // Seleccionar la mejor plantilla (priorizar featured)
   const selectedTemplate = compatibleTemplates[0];
-  
-  // Generar rutina personalizada
+
+  // Generar rutina personalizada y localizar
   const personalizedRoutine = selectedTemplate.generatePersonalizedRoutine(userProfile);
+  localizePersonalizedRoutine(personalizedRoutine, selectedTemplate, lang);
 
   res.json({
     success: true,
@@ -67,8 +120,8 @@ router.get('/personalized', authenticateToken, catchAsyncErrors(async (req, res)
       routine: personalizedRoutine,
       template: {
         templateId: selectedTemplate.templateId,
-        name: selectedTemplate.name,
-        description: selectedTemplate.description
+        name: lang === 'en' && selectedTemplate.nameEn ? selectedTemplate.nameEn : selectedTemplate.name,
+        description: lang === 'en' && selectedTemplate.descriptionEn ? selectedTemplate.descriptionEn : selectedTemplate.description,
       },
       userProfile
     }
@@ -83,9 +136,14 @@ router.get('/templates', authenticateToken, catchAsyncErrors(async (req, res) =>
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
+  const lang = getLang(req);
+
+  const user = await User.findById(req.user.id).select('subscription');
+  const userPlan = user?.subscription?.plan || 'free';
+  const allowedAccessLevels = getAllowedAccessLevels(userPlan);
 
   // Filtros
-  const filters = { isActive: true };
+  const filters = { isActive: true, accessLevel: { $in: allowedAccessLevels } };
 
   if (req.query.ageRange) {
     filters['targetProfile.ageRange'] = req.query.ageRange;
@@ -109,14 +167,14 @@ router.get('/templates', authenticateToken, catchAsyncErrors(async (req, res) =>
 
   const total = await RoutineTemplate.countDocuments(filters);
   const templates = await RoutineTemplate.find(filters)
-    .select('-blocks') // No incluir bloques para reducir tamaño
+    .select('-blocks')
     .skip(skip)
     .limit(limit)
     .sort({ isFeatured: -1, createdAt: -1 });
 
   res.json({
     success: true,
-    data: templates,
+    data: templates.map(t => localizeTemplate(t, lang)),
     pagination: {
       page,
       limit,
@@ -131,6 +189,7 @@ router.get('/templates', authenticateToken, catchAsyncErrors(async (req, res) =>
  * Obtener detalles de una plantilla específica
  */
 router.get('/templates/:templateId', authenticateToken, catchAsyncErrors(async (req, res) => {
+  const lang = getLang(req);
   const template = await RoutineTemplate.findOne({
     templateId: req.params.templateId,
     isActive: true
@@ -142,7 +201,7 @@ router.get('/templates/:templateId', authenticateToken, catchAsyncErrors(async (
 
   res.json({
     success: true,
-    data: template,
+    data: localizeTemplate(template, lang),
   });
 }));
 

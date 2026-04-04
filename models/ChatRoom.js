@@ -42,4 +42,9 @@ chatRoomSchema.index(
   }
 );
 
+// Índices para búsquedas de salas por participante y actividad
+chatRoomSchema.index({ participants: 1 });
+chatRoomSchema.index({ createdBy: 1 });
+chatRoomSchema.index({ type: 1, lastMessageAt: -1 });
+
 module.exports = mongoose.model('ChatRoom', chatRoomSchema);

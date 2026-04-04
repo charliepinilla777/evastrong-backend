@@ -11,6 +11,21 @@ const {
 
 const router = express.Router();
 
+// Helper: aplicar traducción al inglés sobre un documento de receta
+function localizeRecipe(recipe, lang) {
+  if (lang !== 'en') return recipe;
+  const obj = recipe.toObject ? recipe.toObject() : { ...recipe };
+  if (obj.nameEn)        obj.name        = obj.nameEn;
+  if (obj.descriptionEn) obj.description = obj.descriptionEn;
+  if (obj.ingredientsEn && obj.ingredientsEn.length > 0) obj.ingredients = obj.ingredientsEn;
+  if (obj.stepsEn && obj.stepsEn.length > 0)             obj.steps       = obj.stepsEn;
+  if (obj.tagsEn && obj.tagsEn.length > 0)               obj.tags        = obj.tagsEn;
+  // Eliminar campos de traducción de la respuesta
+  delete obj.nameEn; delete obj.descriptionEn;
+  delete obj.ingredientsEn; delete obj.stepsEn; delete obj.tagsEn;
+  return obj;
+}
+
 // Helper: obtener plan del usuario desde el token (opcional)
 async function getUserPlan(req) {
   const authHeader = req.headers['authorization'];
@@ -39,9 +54,10 @@ function getAllowedLevels(plan) {
  * Query params: category, page, limit
  */
 router.get('/', catchAsyncErrors(async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 30;
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 30));
   const skip = (page - 1) * limit;
+  const lang = (req.query.lang || req.headers['accept-language'] || 'es').slice(0, 2).toLowerCase();
 
   const userPlan = await getUserPlan(req);
   const allowedLevels = getAllowedLevels(userPlan);
@@ -61,14 +77,14 @@ router.get('/', catchAsyncErrors(async (req, res) => {
   // Recetas bloqueadas (sin ingredientes ni pasos)
   const lockedFilter = { ...baseFilter, accessLevel: { $nin: allowedLevels } };
   const lockedRecipes = await Recipe.find(lockedFilter)
-    .select('name category imageUrl accessLevel nutrition prepTime cookTime isFeatured')
+    .select('name nameEn category imageUrl accessLevel nutrition prepTime cookTime isFeatured tagsEn tags')
     .sort({ isFeatured: -1, createdAt: -1 });
 
   res.json({
     success: true,
     data: {
-      recipes,
-      lockedRecipes,
+      recipes: recipes.map(r => localizeRecipe(r, lang)),
+      lockedRecipes: lockedRecipes.map(r => localizeRecipe(r, lang)),
       userPlan,
       pagination: {
         page,
@@ -97,7 +113,8 @@ router.get('/:id', catchAsyncErrors(async (req, res) => {
     throw new AuthorizationError('Necesitas una suscripción para ver esta receta');
   }
 
-  res.json({ success: true, data: recipe });
+  const lang = (req.query.lang || req.headers['accept-language'] || 'es').slice(0, 2).toLowerCase();
+  res.json({ success: true, data: localizeRecipe(recipe, lang) });
 }));
 
 // ========== CREAR RECETA (SOLO ADMIN) ==========

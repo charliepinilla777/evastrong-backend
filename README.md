@@ -402,7 +402,9 @@ Para problemas o sugerencias, contacta al equipo de desarrollo.
 
 ## 📄 Licencia
 
-MIT
+© 2024-2025 Carlos Andres Pinilla. Todos los derechos reservados.
+
+Este software es propiedad exclusiva de Carlos Andres Pinilla. Queda estrictamente prohibido copiar, modificar, distribuir o clonar este repositorio sin autorización escrita previa del propietario. Ver archivo [LICENSE](LICENSE).
 
 ---
 

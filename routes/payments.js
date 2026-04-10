@@ -242,8 +242,13 @@ router.post('/capture-order/:orderId', authMiddleware, async (req, res) => {
     }
 
     // FIX #1: usar 'approved' (que si esta en el enum del modelo)
+    const captureId = captureData?.purchase_units?.[0]?.payments?.captures?.[0]?.id;
+    if (!captureId) {
+      console.error('PayPal capture: respuesta inesperada', JSON.stringify(captureData));
+      return res.status(502).json({ success: false, message: 'Respuesta inválida de PayPal' });
+    }
     payment.status = 'approved';
-    payment.paypalTransactionId = captureData.purchase_units[0].payments.captures[0].id;
+    payment.paypalTransactionId = captureId;
     payment.completedAt = new Date();
     await payment.save();
 
@@ -301,7 +306,11 @@ router.post('/webhook', async (req, res) => {
         return res.status(400).json({ error: 'Firma invalida' });
       }
     } else {
-      console.warn('PAYPAL_WEBHOOK_ID no configurado — verificacion de firma omitida');
+      if (process.env.NODE_ENV === 'production') {
+        console.error('PAYPAL_WEBHOOK_ID no configurado en producción — rechazando webhook');
+        return res.status(500).json({ error: 'Configuración de webhook incompleta' });
+      }
+      console.warn('PAYPAL_WEBHOOK_ID no configurado — verificación de firma omitida (solo dev)');
     }
 
     const event = req.body;
@@ -512,11 +521,51 @@ router.post('/mercado-pago/create-preference', authMiddleware, async (req, res) 
 
 router.post('/webhook-mercado-pago', async (req, res) => {
   try {
+    // ── Verificación de firma MercadoPago ────────────────────────────────────
+    const mpSecret = process.env.MERCADO_PAGO_WEBHOOK_SECRET;
+    if (mpSecret) {
+      const xSignature = req.headers['x-signature'] || '';
+      const xRequestId = req.headers['x-request-id'] || '';
+      const dataId     = req.body?.data?.id ?? '';
+
+      // Formato: "ts=TIMESTAMP,v1=HASH"
+      const tsPart = xSignature.split(',').find(p => p.startsWith('ts='));
+      const v1Part = xSignature.split(',').find(p => p.startsWith('v1='));
+
+      if (!tsPart || !v1Part) {
+        console.warn('MercadoPago webhook: firma ausente, request rechazado');
+        return res.status(401).json({ error: 'Firma inválida' });
+      }
+
+      const ts       = tsPart.split('=')[1];
+      const received = v1Part.split('=')[1];
+      const template = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
+      const expected = crypto
+        .createHmac('sha256', mpSecret)
+        .update(template)
+        .digest('hex');
+
+      if (!crypto.timingSafeEqual(Buffer.from(received, 'hex'), Buffer.from(expected, 'hex'))) {
+        console.warn('MercadoPago webhook: firma no coincide, request rechazado');
+        return res.status(401).json({ error: 'Firma inválida' });
+      }
+    } else if (process.env.NODE_ENV === 'production') {
+      console.error('MERCADO_PAGO_WEBHOOK_SECRET no configurado en producción');
+      return res.status(500).json({ error: 'Configuración de webhook incompleta' });
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     const { type, data } = req.body;
+    if (!type || !data) {
+      return res.status(400).json({ error: 'Payload inválido' });
+    }
     console.log('Mercado Pago Webhook Event:', type);
 
     if (type === 'payment') {
       const mpPaymentId = data.id;
+      if (!mpPaymentId) {
+        return res.status(400).json({ error: 'data.id faltante' });
+      }
 
       // Re-fetch desde MP para verificar que el pago es real
       const paymentResponse = await axios.get(

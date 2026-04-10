@@ -61,8 +61,12 @@ module.exports = (io) => {
 
     // ========== leave_room ==========
     socket.on('leave_room', ({ roomId }) => {
-      socket.leave(roomId);
-      socket.emit('room_left', { roomId });
+      try {
+        socket.leave(roomId);
+        socket.emit('room_left', { roomId });
+      } catch (error) {
+        socket.emit('error', { message: error.message });
+      }
     });
 
     // ========== send_message ==========
@@ -122,19 +126,27 @@ module.exports = (io) => {
 
     // ========== typing ==========
     socket.on('typing', ({ roomId }) => {
-      socket.to(roomId).emit('user_typing', {
-        userId: socket.user._id,
-        userName: socket.user.name,
-        roomId,
-      });
+      try {
+        socket.to(roomId).emit('user_typing', {
+          userId: socket.user._id,
+          userName: socket.user.name,
+          roomId,
+        });
+      } catch (error) {
+        socket.emit('error', { message: error.message });
+      }
     });
 
     // ========== stop_typing ==========
     socket.on('stop_typing', ({ roomId }) => {
-      socket.to(roomId).emit('user_stop_typing', {
-        userId: socket.user._id,
-        roomId,
-      });
+      try {
+        socket.to(roomId).emit('user_stop_typing', {
+          userId: socket.user._id,
+          roomId,
+        });
+      } catch (error) {
+        socket.emit('error', { message: error.message });
+      }
     });
 
     // ========== mark_read ==========

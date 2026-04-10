@@ -326,7 +326,7 @@ router.patch('/feedback/:id/read', async (req, res) => {
     await Feedback.findByIdAndUpdate(req.params.id, { status: 'read' });
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ success: false });
+    res.status(500).json({ success: false, error: 'Error al actualizar feedback' });
   }
 });
 

@@ -1,413 +1,375 @@
-# 🎉 EvaStrong Backend - API REST
+# EvaStrong Backend — API REST
 
 <div align="center">
 
-### 🏋️ Fitness App Backend con Autenticación OAuth y Pagos
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org)
+[![Express](https://img.shields.io/badge/Express-4.x-blue)](https://expressjs.com)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-green)](https://www.mongodb.com/cloud/atlas)
+[![JWT](https://img.shields.io/badge/Auth-JWT-yellow)]()
+[![Render](https://img.shields.io/badge/Deploy-Render.com-purple)]()
+[![License](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 
-![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)
-![Express](https://img.shields.io/badge/Express-Latest-blue)
-![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-green)
-![JWT](https://img.shields.io/badge/JWT-Security-yellow)
-![Passport](https://img.shields.io/badge/Passport-OAuth-purple)
+**API REST para EvaStrong — app de fitness femenino con rutinas personalizadas, planes de dieta, pagos y chat.**
 
-[📚 Documentación](#documentación) • [🚀 Quick Start](#quick-start) • [🔧 Configuración](#configuración) • [📋 API](#api-endpoints)
+[Endpoints](#endpoints) • [Modelos](#modelos-de-datos) • [Instalación](#instalación) • [Variables de entorno](#variables-de-entorno) • [Deploy](#despliegue)
 
 </div>
 
 ---
 
-Backend para la app EvaStrong con autenticación OAuth (Google/Apple) y pagos con Mercado Pago.
-
-## 📚 Documentación
-
-Tenemos documentación completa y paso a paso para cada parte:
-
-| Documento | Propósito | Tiempo |
-|-----------|----------|--------|
-| **[QUICK_START.md](./QUICK_START.md)** | Deploy en 5 minutos | ⚡ 5 min |
-| **[MONGODB_SETUP.md](./MONGODB_SETUP.md)** | Configurar MongoDB Atlas | 📚 15 min |
-| **[GOOGLE_OAUTH_SETUP.md](./GOOGLE_OAUTH_SETUP.md)** | Configurar Google OAuth | 🔐 15 min |
-| **[MERCADO_PAGO_SETUP.md](./MERCADO_PAGO_SETUP.md)** | Mercado Pago + PayPal | 💳 20 min |
-| **[RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md)** | Desplegar en Render | 🚀 10 min |
-| **[BACKEND_SETUP.md](./BACKEND_SETUP.md)** | Setup completo local | 📖 20 min |
-
----
-
-## 📋 Características
-
-- ✅ Autenticación OAuth con Google y Apple
-- ✅ Autenticación manual (email/password)
-- ✅ Integración Mercado Pago (pagos y suscripciones)
-- ✅ Gestión de usuarios y perfiles
-- ✅ Webhooks para eventos de pago
-- ✅ JWT tokens
-- ✅ Validación de datos
-- ✅ Rate limiting
-- ✅ CORS configurado
-
-## 🛠️ Stack Tecnológico
+## Stack
 
 - **Runtime:** Node.js 18+
 - **Framework:** Express.js
-- **Base de datos:** MongoDB
-- **Autenticación:** Passport.js, JWT
-- **Pagos:** Mercado Pago SDK
-- **Validación:** express-validator
-- **Seguridad:** Helmet, bcrypt, JWT
+- **Base de datos:** MongoDB (Mongoose)
+- **Autenticación:** JWT + bcrypt
+- **Pagos:** MercadoPago SDK + PayPal
+- **Notificaciones:** Twilio (WhatsApp)
+- **Seguridad:** Helmet, express-rate-limit, express-validator, CORS
+- **Tareas programadas:** node-cron (recordatorios de suscripción)
+- **Desplegado en:** Render.com (free tier — cold start ~30s)
 
-## 📁 Estructura del Proyecto
+---
+
+## Estructura del proyecto
 
 ```
 EvaStrong-Backend/
+├── server.js                    # Entry point, middleware global, rutas
 ├── config/
-│   └── passport.js              # Configuración de estrategias OAuth
+│   └── passport.js              # Estrategias OAuth Google/Apple
 ├── models/
-│   ├── User.js                  # Modelo de usuario
-│   ├── Payment.js               # Modelo de pagos
-│   └── Subscription.js          # Modelo de suscripciones
+│   ├── User.js                  # Usuario (phone, subscription, role)
+│   ├── Routine.js               # Rutina (fases, ejercicios, titleEn/descriptionEn)
+│   ├── Exercise.js              # Ejercicio individual
+│   ├── Recipe.js                # Receta con ingredientes y macros
+│   ├── Plan.js                  # Plan de nutrición
+│   ├── Subscription.js          # Suscripción activa (reminderSent5d)
+│   ├── Payment.js               # Pago (MercadoPago / PayPal)
+│   ├── Feedback.js              # Feedback (rating, category, message)
+│   ├── WorkoutHistory.js        # Historial de entrenamientos completados
+│   ├── ChatRoom.js              # Sala de chat
+│   ├── Message.js               # Mensajes de chat
+│   ├── Video.js                 # Video (cloudUrl o filepath)
+│   ├── RoutineTemplate.js       # Plantilla de rutina (adjustmentRules: Mixed)
+│   ├── AccessLog.js             # Log de acceso
+│   ├── SecurityLog.js           # Log de seguridad
+│   └── Token.js                 # Token de refresco
 ├── routes/
-│   ├── auth.js                  # Rutas de autenticación
-│   ├── users.js                 # Rutas de usuarios
-│   ├── payments.js              # Rutas de pagos
-│   └── subscriptions.js         # Rutas de suscripciones
+│   ├── auth.js                  # Registro, login, OAuth, verify, refresh
+│   ├── users.js                 # Perfil, contraseña, cuenta
+│   ├── routines.js              # CRUD rutinas + lang param + rating atómico
+│   ├── exercises.js             # Ejercicios por tipo/zona
+│   ├── dietRecommendations.js   # Planes de dieta personalizados
+│   ├── recipes.js               # Recetas con filtros
+│   ├── plans.js                 # Planes de suscripción disponibles
+│   ├── subscriptions.js         # Gestión de suscripción del usuario
+│   ├── payments.js              # MercadoPago + PayPal + webhooks
+│   ├── chat.js                  # Salas, mensajes, soporte
+│   ├── feedback.js              # POST /feedback
+│   ├── videos.js                # Videos demostrativos
+│   ├── admin.js                 # Stats reales (WorkoutHistory aggregation)
+│   ├── adminContent.js          # CRUD contenido por admin
+│   ├── adminPanel.js            # Panel web (ruta secreta en .env)
+│   ├── trainerContent.js        # Edición de contenido por entrenador
+│   ├── trainerPanel.js          # Panel de entrenador
+│   ├── routineRecommendations.js # Rutina personalizada por objetivo
+│   ├── security.js              # Logs de seguridad
+│   ├── secureAuth.js            # Autenticación reforzada
+│   └── trial.js                 # Periodo de prueba gratuito
 ├── middleware/
-│   └── auth.js                  # Middleware de autenticación JWT
-├── server.js                    # Archivo principal
-├── package.json                 # Dependencias
-├── .env.example                 # Variables de ambiente (template)
-└── README.md                    # Este archivo
+│   ├── auth.js                  # verifyToken, requireSubscription (null-safe)
+│   ├── adminAuth.js             # requireAdmin
+│   └── trainerAuth.js           # requireTrainer
+├── utils/
+│   └── subscriptionReminder.js  # Cron diario 10am — recordatorio WhatsApp
+└── scripts/
+    ├── seedRoutines.js           # 5 rutinas base
+    ├── seed-routines.js          # 7 rutinas atractivas adicionales
+    └── translate-routines.js     # Migración: puebla titleEn/descriptionEn en DB
 ```
 
-## 🚀 Instalación
+---
 
-### 1. Clonar repositorio
+## Endpoints
 
-```bash
-cd C:\Users\Carlos\Desktop\EvaStrong-Backend
-```
+### Autenticación (`/auth`)
 
-### 2. Instalar dependencias
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| POST | `/auth/register` | Registro (min 8 chars + mayúscula + minúscula + dígito) |
+| POST | `/auth/login` | Login — devuelve JWT |
+| GET | `/auth/verify` | Verificar token activo |
+| POST | `/auth/refresh` | Renovar token |
+| GET | `/auth/google` | Login con Google OAuth |
+| GET | `/auth/apple` | Login con Apple OAuth |
 
-```bash
-npm install
-```
+### Usuarios (`/users`)
 
-### 3. Configurar variables de ambiente
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/users/profile` | Perfil autenticado |
+| PUT | `/users/profile` | Actualizar perfil |
+| POST | `/users/change-password` | Cambiar contraseña |
+| DELETE | `/users/account/delete` | Eliminar cuenta |
 
-```bash
-# Copiar .env.example a .env
-cp .env.example .env
+### Rutinas (`/routines`)
 
-# Editar .env con tus valores
-```
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/routines?lang=en` | Listado con localización (titleEn si lang=en) |
+| GET | `/routines/:id?lang=en` | Detalle de rutina localizado |
+| POST | `/routines/:id/rate` | Calificar (rating atómico con $avg pipeline) |
+| GET | `/routines/favorites` | Favoritos del usuario |
+| POST | `/routines/:id/favorite` | Agregar a favoritos |
 
-### 4. Configurar MongoDB
+#### Localización de rutinas
+- `?lang=en` intercambia `title`/`description` por `titleEn`/`descriptionEn`
+- Para poblar traducciones en DB existente: `node scripts/translate-routines.js`
 
-#### Opción A: Local (recomendado para desarrollo)
+#### Niveles de acceso
+| Nivel | Plan requerido |
+|-------|----------------|
+| `free` | Sin suscripción |
+| `basic` | Plan Básico ($9.99) |
+| `premium` | Plan Premium ($19.99) |
+| `exclusive` | Plan Elite ($29.99) |
 
-```bash
-# Instalar MongoDB Community Edition
-# https://docs.mongodb.com/manual/installation/
+### Dietas y recetas
 
-# Iniciar MongoDB
-mongod
-```
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/diet-recommendations` | Planes personalizados por objetivo |
+| GET | `/recipes` | Listado de recetas |
+| GET | `/recipes/:id` | Detalle de receta |
 
-#### Opción B: MongoDB Atlas (cloud)
+### Suscripciones y pagos
 
-1. Ir a [https://www.mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas)
-2. Crear cuenta gratuita
-3. Crear cluster
-4. Copiar connection string a `.env` como `MONGODB_ATLAS_URI`
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/subscriptions/current` | Suscripción activa del usuario |
+| POST | `/subscriptions/change-plan` | Cambiar plan |
+| POST | `/subscriptions/cancel` | Cancelar suscripción |
+| POST | `/payments/create-preference` | Crear pago MercadoPago |
+| POST | `/payments/paypal/create` | Crear pago PayPal |
+| POST | `/payments/webhook` | Webhook MercadoPago |
+| GET | `/payments/history` | Historial de pagos |
 
-### 5. Configurar OAuth
+### Chat (`/chat`)
 
-#### Google OAuth
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/chat/rooms` | Salas del usuario |
+| POST | `/chat/rooms` | Crear sala |
+| GET | `/chat/rooms/:id/messages` | Mensajes de una sala |
+| POST | `/chat/rooms/:id/messages` | Enviar mensaje |
 
-1. Ir a [Google Cloud Console](https://console.cloud.google.com)
-2. Crear nuevo proyecto
-3. Habilitar Google+ API
-4. Crear credenciales (OAuth 2.0 Client ID)
-5. Copiar a `.env`:
-   - `GOOGLE_CLIENT_ID`
-   - `GOOGLE_CLIENT_SECRET`
-   - `GOOGLE_CALLBACK_URL` = `http://localhost:5000/auth/google/callback`
+### Otros
 
-#### Apple OAuth
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| POST | `/feedback` | Enviar feedback (token opcional) |
+| GET | `/plans` | Planes de suscripción disponibles |
+| GET | `/routine-recommendations` | Rutina personalizada por objetivo/nivel |
 
-1. Ir a [Apple Developer](https://developer.apple.com)
-2. Crear App ID
-3. Configurar Sign in with Apple
-4. Descargar private key
-5. Copiar a `.env`:
-   - `APPLE_CLIENT_ID`
-   - `APPLE_TEAM_ID`
-   - `APPLE_KEY_ID`
-   - `APPLE_PRIVATE_KEY_PATH` = `./keys/AuthKey.p8`
+### Admin (requiere rol admin)
 
-### 6. Configurar Mercado Pago
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/admin/users/stats` | Estadísticas reales de usuarios |
+| GET | `/admin/revenue/stats` | Ingresos del día/mes |
+| GET | `/admin/subscriptions/stats` | Suscripciones activas/vencidas |
+| POST | `/admin/subscriptions/send-reminder` | Enviar recordatorio WhatsApp |
+| PATCH | `/admin-content/routines/:id` | Editar rutina (whitelist incluye titleEn) |
 
-1. Registrarse en [Mercado Pago](https://www.mercadopago.com.ar)
-2. Ir a [Panel de desarrollador](https://www.mercadopago.com.ar/developers/panel)
-3. Copiar credenciales a `.env`:
-   - `MERCADO_PAGO_ACCESS_TOKEN`
-   - `MERCADO_PAGO_PUBLIC_KEY`
+---
 
-### 7. Iniciar servidor
-
-```bash
-# Desarrollo (con auto-reload)
-npm run dev
-
-# Producción
-npm start
-```
-
-El servidor estará disponible en: `http://localhost:5000`
-
-## 📚 API Endpoints
-
-### Autenticación
-
-```
-POST   /auth/register                    # Registro manual
-POST   /auth/login                       # Login manual
-GET    /auth/google                      # Login con Google
-GET    /auth/google/callback             # Callback Google
-GET    /auth/apple                       # Login con Apple
-GET    /auth/apple/callback              # Callback Apple
-POST   /auth/logout                      # Logout
-GET    /auth/verify                      # Verificar token
-POST   /auth/refresh                     # Renovar token
-```
-
-### Usuarios
-
-```
-GET    /users/profile                    # Obtener perfil
-PUT    /users/profile                    # Actualizar perfil
-POST   /users/change-password            # Cambiar contraseña
-GET    /users/:userId                    # Obtener usuario por ID
-DELETE /users/account/delete             # Eliminar cuenta
-```
-
-### Pagos
-
-```
-POST   /payments/create-preference       # Crear preferencia Mercado Pago
-POST   /payments/webhook                 # Webhook Mercado Pago
-GET    /payments/history                 # Historial de pagos
-GET    /payments/:paymentId              # Detalles de pago
-POST   /payments/:paymentId/refund       # Reembolsar pago
-```
-
-### Suscripciones
-
-```
-GET    /subscriptions/current            # Suscripción actual
-GET    /subscriptions/history            # Historial de suscripciones
-POST   /subscriptions/change-plan        # Cambiar plan
-POST   /subscriptions/cancel             # Cancelar suscripción
-POST   /subscriptions/renew              # Renovar suscripción
-```
-
-## 🔑 Ejemplos de Requests
-
-### Registro
-
-```bash
-curl -X POST http://localhost:5000/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "usuario@example.com",
-    "password": "password123",
-    "name": "Juan Pérez"
-  }'
-```
-
-### Login
-
-```bash
-curl -X POST http://localhost:5000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "usuario@example.com",
-    "password": "password123"
-  }'
-```
-
-### Obtener Perfil (requiere token)
-
-```bash
-curl -X GET http://localhost:5000/users/profile \
-  -H "Authorization: Bearer TU_TOKEN_JWT"
-```
-
-### Crear Preferencia de Pago
-
-```bash
-curl -X POST http://localhost:5000/payments/create-preference \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer TU_TOKEN_JWT" \
-  -d '{
-    "plan": "premium",
-    "period": "monthly"
-  }'
-```
-
-## 📊 Esquema de BD
+## Modelos de datos
 
 ### User
-```javascript
+```js
 {
-  _id: ObjectId,
-  email: String (unique),
-  name: String,
-  avatar: String,
-  password: String (hasheada),
-  googleId: String,
-  appleId: String,
-  provider: String,
-  emailVerified: Boolean,
-  phone: String,
-  age: Number,
-  gender: String,
-  fitnessLevel: String,
-  goals: [String],
-  subscription: {
-    plan: String,
-    active: Boolean,
-    startDate: Date,
-    endDate: Date,
-  },
-  createdAt: Date,
-  updatedAt: Date,
-  lastLogin: Date,
-  active: Boolean
+  email, name, password,  // password hasheado con bcrypt
+  role,                   // user | admin | trainer
+  phone,                  // Para recordatorios WhatsApp
+  googleId, appleId, provider,
+  subscription: { plan, active, startDate, endDate },
+  fitnessLevel, goals: [String],
+  active, lastLogin
 }
 ```
 
-### Payment
-```javascript
+### Routine
+```js
 {
-  _id: ObjectId,
-  userId: ObjectId,
-  amount: Number,
-  currency: String,
-  status: String,
-  mercadoPagoPaymentId: String,
-  plan: String,
-  subscriptionPeriod: String,
-  description: String,
-  createdAt: Date,
-  approvedAt: Date,
+  title, description,
+  titleEn, descriptionEn,    // Localización EN
+  accessLevel,               // free | basic | premium | exclusive
+  calentamiento: { exercises: [Exercise] },
+  principal: { exercises: [Exercise], cycles },
+  enfriamiento: { exercises: [Exercise] },
+  rating, ratingsCount,
+  isActive
+}
+```
+
+### Exercise (embebido en Routine)
+```js
+{
+  name, nameEn,
+  shortDescription, shortDescriptionEn,
+  type, zone,
+  sets, repetitions, timeSeconds, restSeconds,
+  exerciseId, videoUrl
+}
+```
+
+### WorkoutHistory
+```js
+{
+  userId, routineName,
+  durationMinutes, category,
+  completedAt
 }
 ```
 
 ### Subscription
-```javascript
+```js
 {
-  _id: ObjectId,
-  userId: ObjectId,
-  plan: String,
-  period: String,
-  status: String,
-  startDate: Date,
-  endDate: Date,
-  nextBillingDate: Date,
-  amount: Number,
-  autoRenew: Boolean,
-  createdAt: Date,
+  userId, plan, period, status,
+  startDate, endDate, nextBillingDate,
+  amount, autoRenew,
+  reminderSent5d    // Evita duplicar recordatorio WhatsApp
 }
 ```
 
-## 🔐 Seguridad
+---
 
-- Contraseñas hasheadas con bcrypt
-- JWT tokens con expiración
-- Rate limiting (100 requests por 15 min)
-- CORS configurado
-- Helmet para headers seguros
-- Validación de inputs
-- HTTPS recomendado en producción
-
-## 🧪 Testing
+## Instalación
 
 ```bash
-npm test
-```
+# 1. Clonar
+git clone https://github.com/charliepinilla777/evastrong-backend.git
+cd evastrong-backend
 
-## 📦 Deployment
-
-### En Vercel
-
-```bash
-npm install -g vercel
-vercel
-```
-
-### En Heroku
-
-```bash
-heroku create evastrong-api
-git push heroku main
-```
-
-### En DigitalOcean
-
-```bash
-# SSH a tu servidor
-ssh root@tu_ip
-
-# Clonar repo
-git clone <repo_url>
-cd EvaStrong-Backend
-
-# Instalar dependencias
+# 2. Dependencias
 npm install
 
-# Configurar .env
-nano .env
+# 3. Variables de entorno
+cp .env.example .env
+# Editar .env con tus valores
 
-# Instalar PM2 para mantener el servidor activo
-npm install -g pm2
-pm2 start server.js --name "eva-strong"
-pm2 save
+# 4. Poblar DB con rutinas iniciales
+node scripts/seedRoutines.js
+node scripts/seed-routines.js
+
+# 5. Traducir rutinas existentes al inglés (one-shot)
+node scripts/translate-routines.js
+
+# 6. Desarrollo (auto-reload)
+npm run dev
+
+# 7. Producción
+npm start
 ```
-
-## 🐛 Troubleshooting
-
-### "MongoDB connection failed"
-- Verificar que MongoDB está corriendo: `mongod`
-- Verificar MONGODB_URI en `.env`
-
-### "Token inválido"
-- Verificar JWT_SECRET en `.env`
-- Verificar que el token no ha expirado
-
-### "Mercado Pago error"
-- Verificar MERCADO_PAGO_ACCESS_TOKEN
-- Usar sandbox token para pruebas
-
-## 📝 Notas
-
-- Los planes tienen precios en pesos argentinos (ARS)
-- Las suscripciones se renuevan automáticamente
-- Los webhooks deben estar configurados en Mercado Pago
-- El email es único por usuario
-
-## 📞 Soporte
-
-Para problemas o sugerencias, contacta al equipo de desarrollo.
-
-## 📄 Licencia
-
-© 2024-2025 Carlos Andres Pinilla. Todos los derechos reservados.
-
-Este software es propiedad exclusiva de Carlos Andres Pinilla. Queda estrictamente prohibido copiar, modificar, distribuir o clonar este repositorio sin autorización escrita previa del propietario. Ver archivo [LICENSE](LICENSE).
 
 ---
 
-**Versión:** 1.0.0  
-**Última actualización:** 2026-01-08  
-**Estado:** ✅ Producción
+## Variables de entorno
+
+```env
+# Base de datos
+MONGODB_URI=mongodb+srv://...
+
+# Autenticación
+JWT_SECRET=tu_secreto_jwt
+
+# MercadoPago
+MERCADO_PAGO_ACCESS_TOKEN=...
+MERCADO_PAGO_PUBLIC_KEY=...
+
+# PayPal
+PAYPAL_CLIENT_ID=...
+PAYPAL_CLIENT_SECRET=...
+
+# Twilio (WhatsApp reminders)
+TWILIO_ACCOUNT_SID=...
+TWILIO_AUTH_TOKEN=...
+TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+
+# OAuth Google
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_CALLBACK_URL=https://tu-dominio/auth/google/callback
+
+# Panel admin web (ruta secreta)
+ADMIN_PANEL_PATH=eva-admin-privado-2025
+
+# Entorno
+NODE_ENV=production
+PORT=5000
+```
+
+> El archivo `.env` está excluido del repositorio via `.gitignore`.
+
+---
+
+## Despliegue
+
+### Render.com (producción actual)
+
+1. Conectar el repo en [render.com](https://render.com)
+2. Build command: `npm install`
+3. Start command: `npm start`
+4. Agregar variables de entorno en el panel de Render
+5. El servicio free tier hiberna tras inactividad — cold start ~30-50s
+
+---
+
+## Recordatorios WhatsApp
+
+El cron job `utils/subscriptionReminder.js` corre diariamente a las 10:00 AM y envía recordatorio por WhatsApp a usuarios con suscripción próxima a vencer (5 días). Usa el campo `reminderSent5d` en `Subscription` para evitar duplicados.
+
+---
+
+## Seguridad
+
+- Contraseñas con bcrypt (salt rounds 12)
+- JWT con expiración configurable
+- Validación de password: mínimo 8 caracteres, mayúscula, minúscula y dígito
+- Rate limiting: 100 requests / 15 min por IP
+- Helmet para headers HTTP seguros
+- CORS configurado
+- `requireSubscription` con null-check seguro
+- Panel admin en ruta secreta (variable de entorno)
+- Logs de seguridad en `SecurityLog`
+
+---
+
+## Agentes de mantenimiento (CCR)
+
+| Agente | Schedule (UTC) | Descripción |
+|--------|----------------|-------------|
+| Security Auditor | Diario 13:00 (8am Bogotá) | Revisa vulnerabilidades y logs |
+| Bug Hunter + Help Checker | 01:00 y 13:00 UTC | Bugs activos; lunes: deps, TODOs, i18n coverage |
+
+Reportes generados: `BUG_REPORT.md`, `HELP_CHECKER_REPORT.md`
+Gestión: https://claude.ai/code/scheduled
+
+---
+
+## Licencia
+
+© 2024-2026 Carlos Andres Pinilla. Todos los derechos reservados.
+
+Queda prohibido copiar, modificar o distribuir este código sin autorización escrita del propietario. Ver [LICENSE](LICENSE).
+
+---
+
+<div align="center">
+
+Desarrollado por [Carlos Andres Pinilla](https://github.com/charliepinilla777)
+
+**Frontend:** [evastrong-front](https://github.com/charliepinilla777/evastrong-front)
+
+</div>
